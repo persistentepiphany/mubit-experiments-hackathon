@@ -1,0 +1,168 @@
+# An ndemo playbook (github.com/splitbrain/ndemo) for a one-minute cut of the
+# same story, played against demo/mock-server.mjs. demo/ndemo/voice.mjs voices
+# the narration locally first, so no TTS key is needed. ndemo writes each
+# segment's audioDuration back into this file when it renders.
+titleCard:
+  title: "labloop · Folio"
+  subtitle: "Learn a reusable skill from doing the work"
+  duration: 2500
+app:
+  url: "http://127.0.0.1:8765/"
+  viewport:
+    width: 1280
+    height: 720
+  scale: 1.5
+  zoom: 1
+  colorScheme: "light"
+  setup:
+    - run: "curl -s -X POST http://127.0.0.1:8765/__reset"
+tts:
+  provider: "openai"
+  voice: "af_heart"
+  speed: 1
+recording:
+  outputDir: "."
+  fps: 30
+segments:
+  - id: "intro"
+    narration: "This is Folio, the front end for labloop. You describe a science task, and it learns a reusable skill from doing the work."
+    intent: "Show the home page: composer, templates and saved skills."
+    actions:
+      - type: "hover"
+        target:
+          selector: ".composer"
+      - type: "wait"
+        duration: 1500
+      - type: "hover"
+        target:
+          selector: ".grid"
+    timing: "parallel"
+    audioDuration: 7584
+    videoDuration: 7586
+  - id: "template"
+    narration: "Let's start from a template, and fold human lysozyme from its UniProt entry."
+    intent: "Pick the UniProt template and enter accession P61626."
+    actions:
+      - type: "click"
+        target:
+          selector: "[data-tpl='uniprot']"
+        done:
+          visible: "[data-param='accession']"
+      - type: "scroll"
+        target:
+          selector: "#runTpl"
+      - type: "type"
+        target:
+          selector: "[data-param='accession']"
+        text: "P61626"
+        delay: 90
+    timing: "parallel"
+    audioDuration: 4536
+    videoDuration: 4537
+  - id: "submit"
+    narration: "First it checks the saved skills. None fits, so it goes to the literature."
+    intent: "Run the template and watch match and research complete."
+    actions:
+      - type: "click"
+        target:
+          selector: "#runTpl"
+        done:
+          visible: "h1.run"
+      - type: "hover"
+        target:
+          selector: "h1.run"
+        done:
+          text:
+            selector: ".cols"
+            has: "papers frozen"
+          timeout: 20000
+    timing: "parallel"
+    audioDuration: 4464
+    videoDuration: 8635
+  - id: "plan"
+    narration: "Then it builds a pipeline from tools on Modal, writes its checks up front, and freezes the plan under a digest."
+    intent: "Plan and freeze complete; frozen checks appear."
+    actions:
+      - type: "hover"
+        target:
+          selector: "h1.run"
+        done:
+          text:
+            selector: ".cols"
+            has: "before any step ran"
+          timeout: 20000
+    timing: "parallel"
+    audioDuration: 6696
+    videoDuration: 6697
+  - id: "grade"
+    narration: "All three checks pass, so the pipeline is saved as a new skill."
+    intent: "The run finishes and the learned box appears."
+    actions:
+      - type: "hover"
+        target:
+          selector: "h1.run"
+        done:
+          visible: ".learned"
+          timeout: 30000
+      - type: "scroll"
+        target:
+          selector: ".learned"
+      - type: "wait"
+        duration: 1200
+    timing: "parallel"
+    audioDuration: 3768
+    videoDuration: 7496
+  - id: "reuse"
+    narration: "Now a second task, in plain words."
+    intent: "Type a myoglobin task into the composer and run it."
+    actions:
+      - type: "click"
+        target:
+          selector: "[data-nav='home']"
+        done:
+          visible: "#prompt"
+      - type: "type"
+        target:
+          selector: "#prompt"
+        text: "Fold human myoglobin, UniProt P02144, and tell me how far to trust the model."
+        delay: 25
+      - type: "click"
+        target:
+          selector: "#runPrompt"
+        done:
+          visible: "h1.run"
+    timing: "parallel"
+    audioDuration: 2232
+    videoDuration: 4971
+  - id: "reused"
+    narration: "This time it reuses the saved skill, skips research and planning, and passes again. So the skill is now validated."
+    intent: "Reuse run finishes; validated skill shown."
+    actions:
+      - type: "hover"
+        target:
+          selector: "h1.run"
+        done:
+          visible: ".learned"
+          timeout: 30000
+      - type: "scroll"
+        target:
+          selector: ".learned"
+      - type: "wait"
+        duration: 1000
+    timing: "parallel"
+    audioDuration: 7104
+    videoDuration: 11360
+  - id: "outro"
+    narration: "Its standing comes only from evidence. That's labloop: it does the work once, and keeps the skill."
+    intent: "Open the skill page."
+    actions:
+      - type: "click"
+        target:
+          selector: "[data-open]"
+        done:
+          visible: ".skillcard, .cols"
+      - type: "wait"
+        duration: 3000
+    timing: "parallel"
+    audioDuration: 5712
+    videoDuration: 5715

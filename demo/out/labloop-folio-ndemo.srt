@@ -1,0 +1,55 @@
+1
+00:00:02,606 --> 00:00:05,176
+This is Folio, the front end for labloop.
+
+2
+00:00:05,176 --> 00:00:10,190
+You describe a science task, and it learns a reusable skill from doing the work.
+
+3
+00:00:10,193 --> 00:00:14,729
+Let's start from a template, and fold human lysozyme from its UniProt entry.
+
+4
+00:00:14,731 --> 00:00:16,749
+First it checks the saved skills.
+
+5
+00:00:16,749 --> 00:00:19,195
+None fits, so it goes to the literature.
+
+6
+00:00:20,782 --> 00:00:25,266
+Then it builds a pipeline from tools on Modal, writes its checks up front
+
+7
+00:00:25,266 --> 00:00:27,478
+and freezes the plan under a digest.
+
+8
+00:00:27,479 --> 00:00:31,247
+All three checks pass, so the pipeline is saved as a new skill.
+
+9
+00:00:31,249 --> 00:00:33,481
+Now a second task, in plain words.
+
+10
+00:00:35,498 --> 00:00:39,594
+This time it reuses the saved skill, skips research and planning
+
+11
+00:00:39,594 --> 00:00:40,682
+and passes again.
+
+12
+00:00:40,682 --> 00:00:42,602
+So the skill is now validated.
+
+13
+00:00:44,352 --> 00:00:46,590
+Its standing comes only from evidence.
+
+14
+00:00:46,590 --> 00:00:50,064
+That's labloop: it does the work once, and keeps the skill.

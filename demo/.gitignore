@@ -1,0 +1,13 @@
+.tools/
+.folio/
+video/node_modules/
+video/.build/
+video/demo-out/
+video/app
+video/.origin
+ndemo/folio-tour/audio/
+ndemo/folio-tour/video-raw/
+ndemo/folio-tour/*.mp4
+ndemo/folio-tour/*.srt
+video/package.json
+video/tsconfig.json
