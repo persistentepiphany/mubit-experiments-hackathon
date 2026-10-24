@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Folio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f1ebe1;--ink:#2a2622;--muted:#8a847a;--card:#fff;--soft:#faf7f2;--line:rgba(42,38,34,.06);--line2:rgba(42,38,34,.12);
+  --olive:#a3a07a;--clay:#c9937a;--slate:#8da2b8;--slatebg:#e6ecf2;--okbg:#e9ead9;--runbg:#f3e3da;--failbg:#f2dcd6;--fail:#b4654f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:'Geist',system-ui,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+a{color:var(--ink)}a:hover{color:#7a7656}
+textarea,input{font-family:inherit}textarea:focus,input:focus{outline:none}
+button{font-family:inherit}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.app{display:flex;min-height:100vh}
+nav{width:200px;flex:none;padding:28px 20px;display:flex;flex-direction:column;gap:28px;border-right:1px solid var(--line)}
+.brand{font-family:'Instrument Serif',serif;font-size:24px;letter-spacing:-.01em;padding:0 8px}
+.navlinks{display:flex;flex-direction:column;gap:2px}
+.navbtn{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:13.5px}
+.navbtn.on{background:rgba(42,38,34,.06)}
+.navbtn .n{margin-left:auto;font-size:11px;color:var(--muted)}
+.dot{width:6px;height:6px;border-radius:50%;flex:none;display:inline-block}
+.foot{margin-top:auto;font-size:11.5px;color:var(--muted);line-height:1.6;padding:0 10px}
+main{flex:1;min-width:0;padding:48px 56px;max-width:1040px}
+h1{font-family:'Instrument Serif',serif;font-weight:400;font-size:40px;line-height:1.1;margin:0 0 8px;letter-spacing:-.015em}
+h1.run{font-size:30px;line-height:1.2;letter-spacing:-.01em;text-wrap:pretty}
+h2{font-family:'Instrument Serif',serif;font-weight:400;font-size:22px;margin:0 0 14px}
+.sub{margin:0;font-size:14.5px;color:var(--muted)}
+.stack{display:flex;flex-direction:column;gap:40px}
+.card{background:var(--card);border-radius:16px;padding:20px;box-shadow:0 1px 0 rgba(42,38,34,.04),0 8px 30px rgba(42,38,34,.05)}
+.composer{padding:20px 22px 16px}
+.composer textarea{width:100%;border:none;resize:none;font-size:16px;line-height:1.5;color:var(--ink);background:transparent}
+.bar{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);flex-wrap:wrap}
+.chip{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--bg);color:var(--ink)}
+.lbl{font-size:12px;color:var(--muted)}
+.primary{all:unset;cursor:pointer;background:var(--ink);color:#fff;font-size:13px;padding:9px 16px;border-radius:999px}
+.primary:hover{background:#4a443c}.primary[disabled]{opacity:.5;cursor:default}
+.ghost{all:unset;cursor:pointer;font-size:13px;padding:9px 14px;border-radius:999px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.tpl{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:10px;background:#fff;border-radius:14px;padding:18px;border:1px solid var(--line)}
+.tpl:hover{border-color:rgba(42,38,34,.18)}.tpl.sel{border-color:var(--ink)}
+.tpl .t{display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:500}
+.tpl .d{font-size:13px;color:var(--muted);line-height:1.5}
+.tpl .m{font-size:11.5px;color:var(--muted);margin-top:auto}
+.params{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.params label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}
+.params input{border:1px solid rgba(42,38,34,.1);border-radius:8px;padding:9px 11px;font-size:13.5px;color:var(--ink);background:var(--soft);width:100%}
+.pills{display:flex;flex-wrap:wrap;gap:8px}
+.skillpill{all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:13px;padding:8px 14px;border-radius:999px;background:#fff;border:1px solid rgba(42,38,34,.08)}
+.skillpill .u{color:var(--muted);font-size:11.5px}
+.back{all:unset;cursor:pointer;font-size:12.5px;color:var(--muted);margin-bottom:14px;display:block}
+.eyebrow{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 10px;border-radius:999px}
+.cols{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,4fr);gap:28px;align-items:start}
+.step{display:grid;grid-template-columns:20px 1fr;gap:14px}
+.rail{display:flex;flex-direction:column;align-items:center}
+.ring{width:20px;height:20px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;border:1.5px solid;box-sizing:border-box}
+.ring span{width:8px;height:8px;border-radius:50%}
+.line{width:1px;flex:1;margin:4px 0}
+.sbody{padding-bottom:22px}
+.shead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.sname{font-size:14.5px;font-weight:500}.sagent{font-size:12px;color:var(--muted)}
+.stime{margin-left:auto;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.sdetail{font-size:13px;color:var(--muted);line-height:1.5;margin-top:4px;overflow-wrap:anywhere}
+.tag{display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:11.5px;padding:3px 9px;border-radius:999px;background:var(--slatebg)}
+.side{display:flex;flex-direction:column;gap:14px}
+.out{display:flex;flex-direction:column;gap:3px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.out:last-child{border-bottom:none;padding-bottom:0}
+.out .ot{font-size:13.5px;line-height:1.4;text-wrap:pretty;overflow-wrap:anywhere}.out .om{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.cardhead{display:flex;align-items:baseline;justify-content:space-between}
+.check{display:flex;gap:10px;align-items:baseline;font-size:13px;line-height:1.45}
+.check .s{font-size:11px;padding:2px 8px;border-radius:999px;flex:none}
+.learned{background:var(--slatebg);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:12px}
+.learned .h{font-family:'Instrument Serif',serif;font-size:20px;line-height:1.25}
+.learned .box{display:flex;align-items:center;gap:8px;background:#fff;border-radius:10px;padding:10px 12px;font-size:13.5px}
+.muted{color:var(--muted)}.small{font-size:12.5px}
+.row{display:flex;align-items:center;gap:12px;padding:14px 16px;background:#fff;border-radius:12px;cursor:pointer;border:1px solid var(--line)}
+.row:hover{border-color:rgba(42,38,34,.18)}
+.list{display:flex;flex-direction:column;gap:8px}
+.err{background:var(--failbg);border-radius:16px;padding:18px 20px;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.skillcard{display:flex;flex-direction:column;gap:10px;background:#fff;border-radius:14px;padding:18px;border:1px solid var(--line)}
+.kv{font-size:12.5px;color:var(--muted);line-height:1.5}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:var(--soft);padding:12px;border-radius:10px;margin:0}
+@media (max-width:820px){
+  .app{flex-direction:column}
+  nav{width:auto;flex-direction:row;align-items:center;padding:14px 16px;gap:12px;border-right:none;border-bottom:1px solid var(--line);overflow-x:auto}
+  .navlinks{flex-direction:row}.foot{display:none}
+  main{padding:24px 16px}
+  h1{font-size:30px}.cols{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav>
+    <div class="brand">Folio</div>
+    <div class="navlinks">
+      <button class="navbtn" data-nav="home"><span class="dot" style="background:var(--olive)"></span>New task</button>
+      <button class="navbtn" data-nav="runs"><span class="dot" style="background:var(--clay)"></span>Runs<span class="n" id="runCount"></span></button>
+      <button class="navbtn" data-nav="skills"><span class="dot" style="background:var(--slate)"></span>Skills<span class="n" id="skillCount"></span></button>
+    </div>
+    <div class="foot">Tools run on Modal.<br>Every run is graded against checks frozen before it starts.</div>
+  </nav>
+  <main id="view"></main>
+</div>
+<script>
+const TEMPLATES = [
+  {id:'fold', name:'Fold a protein', color:'var(--olive)', tools:'ESMFold', eta:'about 2 min',
+   desc:'Predict the structure of one chain and judge whether the fold is confident.',
+   description:'Predict the 3D structure of this single protein chain and report whether the fold is confident.',
+   params:[{key:'sequence', label:'Sequence', value:'GSHMKTAYIAKQRQISFVKSHFSRQLEERL'}]},
+  {id:'complex', name:'Co-fold a complex', color:'var(--clay)', tools:'Boltz-2', eta:'about 6 min',
+   desc:'Co-fold two chains with one seed and judge whether they form a confident interface.',
+   description:'Co-fold these two short protein chains with Boltz-2 using one seed and judge whether they form a confident interface.',
+   params:[{key:'chain_a', label:'Chain A', value:'MKTAYIAKQRQISFVKSHFSRQ'},{key:'chain_b', label:'Chain B', value:'GSHMLEERLKALEEKLKALEEK'}]},
+  {id:'uniprot', name:'Fold a UniProt entry', color:'var(--slate)', tools:'UniProt · ESMFold', eta:'about 2 min',
+   desc:'Fetch a sequence from UniProtKB by accession, then predict and grade its structure.',
+   description:"Fetch this UniProt entry's sequence and predict its structure, reporting whether the fold is confident.",
+   params:[{key:'accession', label:'UniProt accession', value:'P01542'}]},
+];
+const PHASES = [
+  {key:'match', name:'Match against skills', agent:'applicability'},
+  {key:'research', name:'Search the literature', agent:'researcher · extractor'},
+  {key:'plan', name:'Compose a pipeline', agent:'planner'},
+  {key:'freeze', name:'Freeze plan and checks', agent:'sha-256'},
+  {key:'run', name:'Run on Modal', agent:'tools'},
+  {key:'grade', name:'Grade the checks', agent:'grader'},
+  {key:'learn', name:'Record lessons', agent:'reviewer'},
+];
+const S = {selected:null, skills:[], runs:[], dismissed:{}, timer:null};
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(path, opts){
+  const r = await fetch(path, {headers:{'content-type':'application/json'}, ...opts});
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail ? (typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)) : `HTTP ${r.status}`);
+  return body;
+}
+function go(hash){ location.hash = hash; }
+function fmtNum(v){ return typeof v === 'number' ? (Math.abs(v) >= 100 || Number.isInteger(v) ? String(Math.round(v*100)/100) : v.toFixed(3)) : esc(v); }
+function ago(iso){ if(!iso) return ''; const s=(Date.now()-Date.parse(iso))/1000; if(s<60) return 'just now'; if(s<3600) return `${Math.floor(s/60)} min ago`; if(s<86400) return `${Math.floor(s/3600)} h ago`; return new Date(iso).toLocaleDateString(); }
+function secs(a,b){ if(!a||!b) return ''; const s=Math.max(0,(Date.parse(b)-Date.parse(a))/1000); return s<60?`${Math.round(s)}s`:`${Math.floor(s/60)}m ${Math.round(s%60)}s`; }
+function standingPill(st){
+  const m = {draft:['#f3e3da','var(--clay)'], validated:['var(--okbg)','var(--olive)'], retired:['#ece8e1','var(--muted)'], unproven:['#ece8e1','var(--muted)']}[st] || ['#ece8e1','var(--muted)'];
+  return `<span class="status" style="background:${m[0]}"><span class="dot" style="background:${m[1]}"></span>${esc(st)}</span>`;
+}
+function verdictPill(phase, verdict){
+  if (phase === 'error') return `<span class="status" style="background:var(--failbg)"><span class="dot" style="background:var(--fail)"></span>Error</span>`;
+  if (phase === 'done') {
+    const m = {PASS:['var(--okbg)','var(--olive)','Passed'], FAIL:['var(--failbg)','var(--fail)','Failed'], INCONCLUSIVE:['#ece8e1','var(--muted)','Inconclusive']}[verdict] || ['#ece8e1','var(--muted)', verdict||'Done'];
+    return `<span class="status" style="background:${m[0]}"><span class="dot" style="background:${m[1]}"></span>${m[2]}</span>`;
+  }
+  return `<span class="status" style="background:var(--runbg)"><span class="dot" style="background:var(--clay);animation:pulse 1.2s ease-in-out infinite"></span>${phase==='queued'?'Queued':'Running'}</span>`;
+}
+async function refreshCounts(){
+  try { const [r, s] = await Promise.all([api('/runs?limit=200'), api('/skills')]); S.runs = r.runs; S.skills = s.skills;
+    $('#runCount').textContent = S.runs.length || ''; $('#skillCount').textContent = S.skills.length || ''; } catch(e) {}
+}
+function setNav(name){ document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('on', b.dataset.nav === name)); }
+document.querySelectorAll('.navbtn').forEach(b => b.onclick = () => go(b.dataset.nav === 'home' ? '#/' : `#/${b.dataset.nav}`));
+
+/* ---------------------------------------------------------------- home */
+function renderHome(){
+  setNav('home');
+  const sel = TEMPLATES.find(t => t.id === S.selected);
+  $('#view').innerHTML = `<div class="stack">
+    <div><h1>What should we work out for you?</h1>
+      <p class="sub">Describe a task. Agents match it to a saved skill or read the literature, compose a pipeline of Modal tools, run it and grade it.</p></div>
+    <div class="card composer">
+      <textarea id="prompt" rows="3" placeholder="e.g. Fetch UniProt P69905 and predict its structure with ESMFold, reporting whether the fold is confident."></textarea>
+      <div class="bar"><span class="lbl">Agents</span>
+        ${['planner','researcher','extractor','reviewer'].map(a=>`<span class="chip">${a}</span>`).join('')}
+        <button class="primary" id="runPrompt" style="margin-left:auto">Run pipeline</button></div>
+      <div id="promptErr" class="small" style="color:var(--fail);margin-top:8px"></div>
+    </div>
+    <div><h2>Or start from a template</h2>
+      <div class="grid">${TEMPLATES.map(t=>`<button class="tpl ${S.selected===t.id?'sel':''}" data-tpl="${t.id}">
+        <div class="t"><span class="dot" style="width:8px;height:8px;background:${t.color}"></span>${esc(t.name)}</div>
+        <div class="d">${esc(t.desc)}</div><div class="m">${esc(t.tools)} · ${esc(t.eta)}</div></button>`).join('')}</div></div>
+    ${sel ? `<div class="card" style="padding:22px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="dot" style="width:8px;height:8px;background:${sel.color}"></span><span style="font-size:15px;font-weight:500">${esc(sel.name)}</span><span class="small muted">inputs</span></div>
+      <div class="params">${sel.params.map(p=>`<label>${esc(p.label)}<input data-param="${p.key}" value="${esc(p.value)}"></label>`).join('')}</div>
+      <div id="tplErr" class="small" style="color:var(--fail)"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px"><button class="ghost" id="clearTpl">Cancel</button><button class="primary" id="runTpl">Run pipeline</button></div>
+    </div>` : ''}
+    ${S.skills.length ? `<div><h2>Reusable skills</h2><div class="pills">${S.skills.map(s=>`<button class="skillpill" data-skill="${esc(s.name)}"><span class="dot" style="background:var(--slate)"></span>${esc(s.title||s.name)}<span class="u">used ${s.runs}×</span></button>`).join('')}</div></div>` : ''}
+  </div>`;
+  document.querySelectorAll('[data-tpl]').forEach(b => b.onclick = () => { S.selected = b.dataset.tpl; renderHome(); });
+  document.querySelectorAll('[data-skill]').forEach(b => b.onclick = () => go(`#/skills/${b.dataset.skill}`));
+  if ($('#clearTpl')) $('#clearTpl').onclick = () => { S.selected = null; renderHome(); };
+  $('#runPrompt').onclick = async () => {
+    const text = $('#prompt').value.trim();
+    if (text.length < 3) { $('#promptErr').textContent = 'Describe the task first.'; return; }
+    await submit({description:text, inputs:{}}, '#runPrompt', '#promptErr');
+  };
+  if ($('#runTpl')) $('#runTpl').onclick = async () => {
+    const inputs = {}; document.querySelectorAll('[data-param]').forEach(i => inputs[i.dataset.param] = i.value.trim());
+    await submit({description:sel.description, inputs}, '#runTpl', '#tplErr');
+  };
+}
+async function submit(task, btn, errEl){
+  $(btn).disabled = true;
+  try { const r = await api('/tasks', {method:'POST', body:JSON.stringify(task)}); S.selected = null; go(`#/runs/${r.run_id}`); }
+  catch(e){ $(errEl).textContent = e.message; $(btn).disabled = false; }
+}
+
+/* ---------------------------------------------------------------- run */
+function phaseDetail(key, d){
+  const st = d.status || {}, m = d.match, plan = d.plan, res = d.research, ex = d.experiments || [], R = d.results;
+  switch(key){
+    case 'match': if (!m) return {};
+      return m.decision === 'reuse'
+        ? {detail:`Reused a saved skill. Matched “${m.matched_applies_when || m.reason}”.`, tag:m.skill}
+        : {detail: m.candidates && m.candidates.length ? (m.reason || 'No saved skill fits.') : 'No saved skills yet, so a new pipeline is planned.'};
+    case 'research': if (!res) return {};
+      return {detail:`${res.queries.length} ${res.queries.length===1?'query':'queries'}, ${res.papers.length} ${res.papers.length===1?'paper':'papers'} frozen, ${(res.extractions||[]).filter(e=>e.relevant).length} judged relevant.${res.stopped_early?' Stopped at the token budget.':''}`};
+    case 'plan': if (!plan) return {};
+      return {detail:`${plan.steps.map(s=>s.tool).join(' → ')}, with ${plan.checks.length} acceptance ${plan.checks.length===1?'check':'checks'}.`};
+    case 'freeze': return d.plan_sha256 ? {detail:`Plan frozen as sha-256 ${d.plan_sha256.slice(0,12)}… before any step ran.`} : {};
+    case 'run': if (!ex.length) return {};
+      { const ok = ex.filter(e=>e.status==='ok').length, bad = ex.find(e=>e.status!=='ok');
+        return {detail:`${ok} of ${ex.length} steps succeeded.${bad?` ${bad.step_id}: ${String(bad.error||'').slice(0,200)}`:''}`}; }
+    case 'grade': if (!R || !R.counts) return {};
+      return {detail:`${R.verdict}. ${R.counts.PASS} passed, ${R.counts.FAIL} failed, ${R.counts.UNVERIFIABLE} unverifiable.`};
+    case 'learn': if (st.phase !== 'done') return {};
+      { const sk = st.skill; const n = (st.lessons||[]).length;
+        const what = !sk ? 'No skill saved.' : sk.action === 'created' ? `Saved as skill ${sk.skill} (${sk.standing}).` : `Run added to ${sk.skill}, now ${sk.standing}.`;
+        return {detail:`${n} ${n===1?'lesson':'lessons'} recorded. ${what}`, tag: sk ? sk.skill : null}; }
+  }
+  return {};
+}
+function renderSteps(d){
+  const st = d.status || {}, hist = st.history || [], phase = st.phase || 'queued';
+  const seen = {}; hist.forEach((h,i) => { if (PHASES.some(p=>p.key===h.phase)) seen[h.phase] = {at:h.at, next:(hist[i+1]||{}).at}; });
+  const finished = phase === 'done' || phase === 'error';
+  const tools = d.plan ? [...new Set(d.plan.steps.map(s=>s.tool))].join(' · ') : 'tools';
+  return PHASES.map((p,i) => {
+    const visited = !!seen[p.key];
+    let state = 'todo';
+    if (visited) state = (phase === p.key && !finished) ? 'active' : (phase === 'error' && phase !== p.key && hist.length && hist[hist.length-2] && hist[hist.length-2].phase === p.key) ? 'failed' : 'done';
+    if (!visited && finished) state = 'skipped';
+    if (!visited && !finished && d.match && d.match.decision === 'reuse' && (p.key==='research'||p.key==='plan')) state = 'skipped';
+    const info = state === 'done' || state === 'failed' ? phaseDetail(p.key, d) : {};
+    const detail = state === 'active' ? 'Working…' : state === 'skipped' ? (d.match && d.match.decision==='reuse' && (p.key==='research'||p.key==='plan') ? 'Skipped, the saved skill already holds the pipeline.' : 'Not reached.') : state === 'failed' ? (st.error||'Failed.') : (info.detail||'');
+    const c = {done:['var(--olive)','var(--olive)','#fff'], failed:['var(--fail)','var(--fail)','#fff'], active:['#fff','var(--clay)','var(--clay)'], todo:['var(--bg)','rgba(42,38,34,.15)','transparent'], skipped:['var(--bg)','rgba(42,38,34,.15)','transparent']}[state];
+    const time = state === 'active' ? 'running' : (state === 'done' || state === 'failed') && seen[p.key] ? secs(seen[p.key].at, seen[p.key].next) : '';
+    const last = i === PHASES.length - 1;
+    return `<div class="step"><div class="rail"><span class="ring" style="background:${c[0]};border-color:${c[1]}"><span style="background:${c[2]};animation:${state==='active'?'pulse 1.2s ease-in-out infinite':'none'}"></span></span>
+      <span class="line" style="background:${last?'transparent':state==='done'?'var(--olive)':'rgba(42,38,34,.12)'}"></span></div>
+      <div class="sbody" style="opacity:${state==='todo'||state==='skipped'?.45:1}">
+        <div class="shead"><span class="sname">${esc(p.name)}</span><span class="sagent">${esc(p.key==='run'?tools:p.agent)}</span><span class="stime">${esc(time)}</span></div>
+        <div class="sdetail">${esc(detail)}</div>
+        ${info.tag ? `<span class="tag"><span class="dot" style="width:5px;height:5px;background:var(--slate)"></span>${esc(info.tag)}</span>` : ''}
+      </div></div>`;
+  }).join('');
+}
+function renderOutputs(d){
+  const ex = (d.experiments||[]).filter(e=>e.status==='ok'), papers = (d.research && d.research.papers) || [];
+  const items = ex.map(e => {
+    const sc = (e.result && e.result.scores) || {}; const art = (e.result && e.result.artifacts) || {};
+    const scoreText = Object.entries(sc).map(([k,v])=>`${k} ${fmtNum(v)}`).join(' · ');
+    return `<div class="out"><div class="ot">${esc(e.step_id)} · ${esc(e.tool)}</div><div class="om">${esc(scoreText||'no scores')}</div>${art.structure?`<div class="om">${esc(art.structure)}</div>`:''}</div>`;
+  }).concat(papers.map(p => `<div class="out"><div class="ot">${esc(p.title)}</div><div class="om">${esc([p.year, p.doi ? 'doi '+p.doi : p.id].filter(Boolean).join(' · '))}</div></div>`));
+  return `<div class="card" style="display:flex;flex-direction:column;gap:14px"><div class="cardhead"><span class="eyebrow">Outputs</span><span class="small muted">${papers.length} ${papers.length===1?'paper':'papers'}</span></div>
+    ${items.length ? items.join('') : '<div class="small muted" style="line-height:1.5">Results appear here as agents finish each step.</div>'}</div>`;
+}
+function renderChecks(d){
+  const R = d.results; if (!R || !R.checks) {
+    if (!d.plan) return '';
+    return `<div class="card" style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">Frozen checks</span>${d.plan.checks.map(c=>`<div class="check"><span class="s" style="background:#ece8e1">pending</span><span>${esc(c.metric)} ${esc(c.op||'≈')} ${fmtNum(c.value ?? c.reference)}${c.tolerance!=null?' ± '+fmtNum(c.tolerance):''}</span></div>`).join('')}</div>`;
+  }
+  const col = {PASS:'var(--okbg)', FAIL:'var(--failbg)', UNVERIFIABLE:'#ece8e1'};
+  return `<div class="card" style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">Checks</span>${R.checks.map(c=>`<div class="check"><span class="s" style="background:${col[c.status]}">${esc(c.status.toLowerCase())}</span><span>${esc(c.metric)} ${esc(c.op||'≈')} ${fmtNum(c.value ?? c.reference)}${c.tolerance!=null?' ± '+fmtNum(c.tolerance):''}<span class="muted">, observed ${c.observed==null?'nothing':fmtNum(c.observed)}${c.reason?' · '+esc(c.reason):''}</span></span></div>`).join('')}</div>`;
+}
+function renderSummary(d){
+  const st = d.status || {}; if (st.phase !== 'done') return '';
+  const lessons = st.lesson_texts || [];
+  return `<div class="card" style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">Summary</span>
+    <p style="margin:0;font-size:14px;line-height:1.6;text-wrap:pretty">${esc(st.summary || `Verdict ${st.verdict}.`)}</p>
+    ${lessons.length ? `<div class="small muted" style="line-height:1.55">${lessons.slice(0,4).map(l=>`• ${esc(l)}`).join('<br>')}</div>` : ''}</div>`;
+}
+function renderLearned(d){
+  const st = d.status || {}, sk = st.skill; if (st.phase !== 'done' || !sk || S.dismissed[d.run_id]) return '';
+  if (sk.action === 'created') return `<div class="learned"><div class="h">This run learned something reusable.</div>
+      <div class="small" style="color:#4a443c;line-height:1.5">${esc((d.plan && d.plan.skill && d.plan.skill.description) || '')}</div>
+      <div class="box"><span class="dot" style="background:var(--slate)"></span>${esc(sk.skill)}<span style="margin-left:auto">${standingPill(sk.standing)}</span></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end"><button class="ghost" data-dismiss style="color:#4a443c">Dismiss</button><button class="primary" data-open="${esc(sk.skill)}">Open skill</button></div></div>`;
+  return `<div class="learned"><div class="h">A saved skill did this work.</div>
+    <div class="box"><span class="dot" style="background:var(--slate)"></span>${esc(sk.skill)}<span style="margin-left:auto">${standingPill(sk.standing)}</span></div>
+    <div style="display:flex;justify-content:flex-end"><button class="primary" data-open="${esc(sk.skill)}">Open skill</button></div></div>`;
+}
+async function renderRun(id){
+  setNav('runs');
+  let d;
+  try { d = await api(`/runs/${id}`); } catch(e) { $('#view').innerHTML = `<button class="back" onclick="go('#/runs')">← Runs</button><div class="err">${esc(e.message)}</div>`; return; }
+  if (location.hash !== `#/runs/${id}`) return;
+  const st = d.status || {phase:d.phase||'queued'}, phase = st.phase || d.phase || 'queued';
+  const origin = st.origin ? (st.origin.kind === 'skill' ? `Skill · ${st.origin.skill} v${st.origin.version}` : 'New pipeline') : (d.match && d.match.decision === 'reuse' ? `Skill · ${d.match.skill}` : 'Task');
+  $('#view').innerHTML = `<div style="display:flex;flex-direction:column;gap:32px">
+    <div><button class="back" onclick="go('#/')">← New task</button>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap"><span class="eyebrow">${esc(origin)}</span>${verdictPill(phase, st.verdict)}<span class="small muted">${esc(id)}</span></div>
+      <h1 class="run">${esc((d.task && d.task.description) || 'Queued task')}</h1>
+      ${d.task && Object.keys(d.task.inputs||{}).length ? `<div class="kv" style="margin-top:8px">${Object.entries(d.task.inputs).map(([k,v])=>`<span style="margin-right:14px">${esc(k)} <span style="color:var(--ink)">${esc(String(typeof v==='string'?v:JSON.stringify(v)).slice(0,80))}</span></span>`).join('')}</div>` : ''}
+    </div>
+    ${phase === 'error' ? `<div class="err"><strong>The run stopped.</strong> ${esc(st.error)}</div>` : ''}
+    <div class="cols"><div>${renderSteps(d)}</div>
+      <div class="side">${renderOutputs(d)}${renderChecks(d)}${renderSummary(d)}${renderLearned(d)}</div></div>
+  </div>`;
+  document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => go(`#/skills/${b.dataset.open}`));
+  document.querySelectorAll('[data-dismiss]').forEach(b => b.onclick = () => { S.dismissed[id] = true; renderRun(id); });
+  clearTimeout(S.timer);
+  if (phase !== 'done' && phase !== 'error') S.timer = setTimeout(() => renderRun(id), 2500);
+  else refreshCounts();
+}
+
+/* ---------------------------------------------------------------- lists */
+async function renderRuns(){
+  setNav('runs'); await refreshCounts();
+  $('#view').innerHTML = `<div class="stack" style="gap:24px"><div><h1>Runs</h1><p class="sub">Every task, with its frozen plan and graded verdict.</p></div>
+    <div class="list">${S.runs.length ? S.runs.map(r=>`<div class="row" data-run="${esc(r.run_id)}">
+      <div style="flex:1;min-width:0"><div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.description)}</div>
+      <div class="small muted">${esc(r.origin && r.origin.kind==='skill' ? 'skill '+r.origin.skill : 'new pipeline')} · ${esc(ago(r.started_at))}</div></div>
+      ${verdictPill(r.phase, r.verdict)}</div>`).join('') : '<div class="muted small">No runs yet.</div>'}</div></div>`;
+  document.querySelectorAll('[data-run]').forEach(e => e.onclick = () => go(`#/runs/${e.dataset.run}`));
+}
+async function renderSkills(){
+  setNav('skills'); await refreshCounts();
+  $('#view').innerHTML = `<div class="stack" style="gap:24px"><div><h1>Skills</h1><p class="sub">Pipelines that passed their frozen checks. Standing comes from evidence alone.</p></div>
+    <div class="grid">${S.skills.length ? S.skills.map(s=>`<div class="skillcard" style="cursor:pointer" data-skill="${esc(s.name)}">
+      <div style="display:flex;align-items:center;gap:8px"><span class="dot" style="background:var(--slate)"></span><span style="font-size:14.5px;font-weight:500">${esc(s.title||s.name)}</span></div>
+      <div class="kv">${esc(s.description)}</div>
+      <div class="pills">${s.tools.map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:auto">${standingPill(s.standing)}<span class="small muted">${s.passes} of ${s.runs} runs passed · v${s.version}</span></div>
+    </div>`).join('') : '<div class="muted small">No skills yet. A run that passes its checks saves its pipeline here.</div>'}</div></div>`;
+  document.querySelectorAll('[data-skill]').forEach(e => e.onclick = () => go(`#/skills/${e.dataset.skill}`));
+}
+async function renderSkill(name){
+  setNav('skills');
+  let d; try { d = await api(`/skills/${encodeURIComponent(name)}`); } catch(e) { $('#view').innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const s = d.skill, c = d.card;
+  $('#view').innerHTML = `<div style="display:flex;flex-direction:column;gap:28px">
+    <div><button class="back" onclick="go('#/skills')">← Skills</button>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">${standingPill(c.standing)}<span class="small muted">${c.passes} of ${c.runs} runs passed · v${c.version}</span></div>
+      <h1 class="run">${esc(s.title)}</h1><p class="sub" style="margin-top:8px">${esc(s.description)}</p></div>
+    <div class="cols"><div style="display:flex;flex-direction:column;gap:14px">
+      <div class="card" style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">Applies when</span>${s.applies_when.map(a=>`<div class="small">• ${esc(a)}</div>`).join('')}
+        <span class="eyebrow" style="margin-top:8px">Not for</span>${s.not_for.map(a=>`<div class="small muted">• ${esc(a)}</div>`).join('') || '<div class="small muted">Nothing stated.</div>'}</div>
+      <div class="card" style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">Pipeline</span>
+        ${s.pipeline.steps.map(st=>`<div class="small"><strong style="font-weight:500">${esc(st.id)}</strong> · ${esc(st.tool)} <span class="muted">${esc(JSON.stringify(st.args))}</span></div>`).join('')}
+        <span class="eyebrow" style="margin-top:8px">Checks</span>${s.pipeline.checks.map(ch=>`<div class="small">${esc(ch.metric)} ${esc(ch.op||'≈')} ${fmtNum(ch.value ?? ch.reference)}${ch.tolerance!=null?' ± '+fmtNum(ch.tolerance):''}</div>`).join('')}</div>
+      <div class="card" style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">Evidence</span>
+        ${s.evidence.map(e=>`<div class="row" data-run="${esc(e.run_id)}" style="padding:10px 12px">${verdictPill('done', e.verdict)}<span class="small" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.task)}</span><span class="small muted">${esc(e.inputs_digest.slice(0,8))}</span></div>`).join('')}</div>
+    </div>
+    <div class="side">
+      <div class="card" style="display:flex;flex-direction:column;gap:14px"><span class="eyebrow">Run this skill</span>
+        <div class="params" style="grid-template-columns:1fr">${Object.entries(s.input_schema||{}).map(([k,v])=>`<label>${esc(k)}<span style="font-size:11px">${esc(v.description||v.type||'')}</span><input data-input="${esc(k)}" data-type="${esc(v.type||'string')}"></label>`).join('') || '<div class="small muted">This skill takes no inputs.</div>'}</div>
+        <div id="skillErr" class="small" style="color:var(--fail)"></div>
+        <div style="display:flex;justify-content:flex-end"><button class="primary" id="runSkill" ${c.standing==='retired'?'disabled':''}>Run skill</button></div></div>
+      ${(s.lessons||[]).length ? `<div class="card" style="display:flex;flex-direction:column;gap:8px"><span class="eyebrow">Lessons</span>${s.lessons.slice(-6).map(l=>`<div class="small muted" style="line-height:1.5">• ${esc(l)}</div>`).join('')}</div>` : ''}
+    </div></div></div>`;
+  document.querySelectorAll('[data-run]').forEach(e => e.onclick = () => go(`#/runs/${e.dataset.run}`));
+  $('#runSkill').onclick = async () => {
+    const inputs = {};
+    for (const i of document.querySelectorAll('[data-input]')) {
+      let v = i.value.trim(); const t = i.dataset.type;
+      if (t === 'integer' || t === 'number') v = Number(v); else if (t === 'boolean') v = v === 'true'; else if (t === 'array' || t === 'object') { try { v = JSON.parse(v); } catch(e) { $('#skillErr').textContent = `${i.dataset.input} must be JSON`; return; } }
+      inputs[i.dataset.input] = v;
+    }
+    $('#runSkill').disabled = true;
+    try { const r = await api(`/skills/${encodeURIComponent(name)}/run`, {method:'POST', body:JSON.stringify({inputs})}); go(`#/runs/${r.run_id}`); }
+    catch(e) { $('#skillErr').textContent = e.message; $('#runSkill').disabled = false; }
+  };
+}
+
+/* ---------------------------------------------------------------- router */
+async function route(){
+  clearTimeout(S.timer);
+  const h = location.hash.replace(/^#/, '') || '/';
+  let m;
+  if ((m = h.match(/^\/runs\/(r-[0-9a-f-]+)$/))) return renderRun(m[1]);
+  if (h === '/runs') return renderRuns();
+  if ((m = h.match(/^\/skills\/([a-z0-9_]+)$/))) return renderSkill(m[1]);
+  if (h === '/skills') return renderSkills();
+  await refreshCounts(); renderHome();
+}
+window.addEventListener('hashchange', route);
+refreshCounts().then(route);
+</script>
+</body>
+</html>
