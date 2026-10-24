@@ -105,6 +105,8 @@ modal run modal_apps/tools_app.py::smoke
 modal deploy modal_apps/backend_app.py
 ```
 
+A redeploy did not always replace containers that were already warm, so a function could keep serving the previous code. Stopping an app before deploying it again (`modal app stop -y labloop-tools`) guarantees that the next call runs the new code; nothing is lost, because state and weights live on Volumes.
+
 `MOONSHOT_API_KEY` and `MUBIT_PROJECT_ID` may be added to the secret. `MUBIT_PROJECT_ID` enables the skill mirror. Deploying the backend with `PPI_HARNESS_PATH` pointing at a ppi-harness checkout ships ppi-assure into the image for the domain grader.
 
 The backend serves the frontend at `/` and six endpoints.
