@@ -25,6 +25,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
 
 ROLE_DEFAULTS = {
     "planner": "mubit:claude-sonnet-5-5",
+    "researcher": "mubit:claude-haiku-5-5",
     "extractor": "mubit:claude-haiku-5-5",
     "applicability": "mubit:claude-haiku-5-5",
     "reviewer": "zai:glm-5.3",

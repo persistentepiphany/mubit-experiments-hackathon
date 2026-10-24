@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from labloop import catalog
 from labloop.canonical import digest_bytes
 from labloop.dispatch import Dispatcher
 from labloop.lit import fetch_corpus
@@ -53,7 +54,20 @@ def _freeze_corpus(out: Path, queries: list[str], papers: list[dict[str, Any]]) 
 def research(task: dict[str, Any], *, run: RunDir, run_id: str, dispatcher: Dispatcher,
              models: Models) -> dict[str, Any]:
     cap = limits()
-    queries = [q for q in (task.get("research_queries") or [task["description"][:300]]) if q][: cap["max_queries"]]
+    queries = list(task.get("research_queries") or [])
+    query_error = None
+    if not queries:
+        user = json.dumps({"task": task["description"], "max_queries": cap["max_queries"],
+                           "tools": sorted(catalog.available())})
+        try:
+            answer, _ = ask_json(models, "researcher", user, run_id=run_id, max_tokens=512,
+                                 check=lambda o: [] if isinstance(o, dict) and isinstance(o.get("queries"), list)
+                                 and all(isinstance(q, str) for q in o["queries"]) else ["queries must be strings"])
+            queries = answer["queries"]
+        except ModelError as error:
+            query_error = str(error)
+        queries = queries or [task["description"][:300]]
+    queries = [q for q in queries if q.strip()][: cap["max_queries"]]
     calls = [("literature_search", {"query": q, "page_size": cap["page_size"],
                                     "fulltext_chars": cap["fulltext_chars"], "run_id": run_id,
                                     "step_id": f"research_{i}"}) for i, q in enumerate(queries)]
@@ -93,6 +107,7 @@ def research(task: dict[str, Any], *, run: RunDir, run_id: str, dispatcher: Disp
                             "year": paper.get("year"), **extraction})
     summary = {
         "queries": queries,
+        "query_error": query_error,
         "search_errors": search_errors,
         "papers": [{"id": p.get("id"), "doi": p.get("doi"), "title": p.get("title"), "year": p.get("year")}
                    for p in chosen],

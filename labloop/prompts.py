@@ -13,7 +13,7 @@ You receive a task, its inputs, the tool catalog, a procedure extracted from the
 Rules:
 1. Use only tools listed in the catalog. Never invent tools, arguments or outputs.
 2. A step argument may be a literal or a whole-string reference: "$inputs.<name>", "$run_id", or "$steps.<earlier_step_id>.<field>" where <field> is one of the outputs the catalog lists for that tool, such as "scores.mean_plddt" or "data.sequence".
-3. Declare acceptance checks before anything runs. Each check reads one numeric output as "<step_id>.scores.<name>" and either compares it with a value ("op" one of > >= < <= == !=, "value" a number) or matches a published reference ("reference" a number, "tolerance" a non-negative number, "source" naming the paper). Prefer a reference check when the literature reports a comparable number. Choose thresholds a correct run would meet and a broken run would not.
+3. Declare acceptance checks before anything runs. Each check reads one numeric output as "<step_id>.scores.<name>" and either compares it with a value ("op" one of > >= < <= == !=, "value" a number) or matches a published reference ("reference" a number, "tolerance" a non-negative number, "source" naming the paper). Prefer a reference check when the literature reports a comparable number. Choose thresholds a correct run would meet and a broken run would not. A check must hold for every input the skill's applies_when admits, so never compare with a number derived from this task's particular inputs, such as a sequence length.
 4. Keep the pipeline as small as the task allows. Prefer a single seed and default sampling settings unless the task asks otherwise.
 5. Every choice the literature did not settle (a threshold, a seed, a tool choice) is a decision with a reason, marked "source_silent": true.
 6. Describe the pipeline as a reusable skill. "applies_when" lists concrete conditions on the task and its inputs under which this pipeline is valid. "not_for" lists cases it must not be used for. "input_schema" names every $inputs reference with a type and description.
@@ -36,6 +36,13 @@ Answer with one JSON object and nothing else:
  "procedure": {"steps": ["..."], "tools": ["..."], "parameters": {"<name>": "<value as stated>"}},
  "reported_numbers": [{"quantity": "...", "value": 0, "unit": "...", "context": "..."}],
  "summary": "two sentences at most"}"""
+
+RESEARCHER = """You write literature search queries for Europe PMC.
+
+You receive a computational biology task and the names of the tools available to carry it out. Write short queries that would find papers describing how to do this kind of task with such tools: methods, benchmarks, and reported confidence or accuracy numbers. Use Europe PMC syntax: quoted phrases, AND, OR, and field tags such as TITLE: or ABSTRACT: where they help. Prefer general method terms over details specific to this task's inputs.
+
+Answer with one JSON object and nothing else:
+{"queries": ["...", "..."]}"""
 
 APPLICABILITY = """You decide whether a saved pipeline skill fits a new task.
 
@@ -61,6 +68,7 @@ Answer with one JSON object and nothing else:
 
 SYSTEM = {
     "planner": PLANNER,
+    "researcher": RESEARCHER,
     "extractor": EXTRACTOR,
     "applicability": APPLICABILITY,
     "reviewer": REVIEWER,

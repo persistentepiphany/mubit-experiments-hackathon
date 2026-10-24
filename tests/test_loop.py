@@ -29,6 +29,7 @@ def test_first_task_plans_runs_grades_and_saves_a_skill(tmp_path):
     assert record["phase"] == "error"  # the plan refers to $inputs.sequence, which the task does not supply
 
     loop, models, dispatcher = make_loop(tmp_path / "b", {
+        "researcher": [{"queries": ["\"ESMFold\" AND pLDDT"]}],
         "extractor": [EXTRACTION], "planner": [esmfold_plan()], "reviewer": [REVIEW]})
     record = loop.run_task({"description": "Fold this short peptide",
                             "inputs": {"sequence": "MKTAYIAKQRQISFVKSHFSRQ"}})
@@ -47,7 +48,8 @@ def test_first_task_plans_runs_grades_and_saves_a_skill(tmp_path):
     assert (run / "research" / "corpus" / "manifest.json").exists()
     skill = SkillStore(loop.state.skills).get("esmfold_monomer_confidence")
     assert standing(skill) == "draft"
-    assert [c["role"] for c in models.calls] == ["extractor", "planner", "reviewer"]
+    assert [c["role"] for c in models.calls] == ["researcher", "extractor", "planner", "reviewer"]
+    assert dispatcher.calls[0] == ("literature_search", {**dispatcher.calls[0][1], "query": '"ESMFold" AND pLDDT'})
     assert dispatcher.calls[-1][0] == "esmfold" and dispatcher.calls[-1][1]["run_id"] == record["run_id"]
 
 

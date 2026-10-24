@@ -114,12 +114,18 @@ class MubitMemory:
             kwargs["transport"] = os.environ["MUBIT_TRANSPORT"]
         self.client = mubit.Client(**kwargs)
         self.errors: list[str] = []
+        self.remote = True
 
     def _note(self, action: str, error: Exception) -> None:
         self.errors.append(f"{action}: {type(error).__name__}: {str(error)[:200]}")
+        if "unknown_route" in str(error) or type(error).__name__ == "AuthError":
+            # The endpoint does not serve the memory API for this key; stop asking for the rest of the process.
+            self.remote = False
 
     def remember(self, content, *, lesson_type, run_id, metadata=None) -> str:
         item_id = self.local.remember(content, lesson_type=lesson_type, run_id=run_id, metadata=metadata)
+        if not self.remote:
+            return item_id
         try:
             self.client.remember(content=content, session_id=run_id, agent_id=AGENT_ID, item_id=item_id,
                                  intent="lesson", lesson_type=lesson_type, lesson_scope="global",
@@ -129,6 +135,8 @@ class MubitMemory:
         return item_id
 
     def context(self, query, *, run_id, limit=5):
+        if not self.remote:
+            return self.local.context(query, run_id=run_id, limit=limit)
         try:
             response = self.client.get_context(session_id=run_id, query=query, limit=limit,
                                                format="structured")
@@ -147,6 +155,8 @@ class MubitMemory:
     def record_outcome(self, reference_id, *, outcome, signal, rationale, run_id) -> None:
         self.local.record_outcome(reference_id, outcome=outcome, signal=signal, rationale=rationale,
                                   run_id=run_id)
+        if not self.remote:
+            return
         try:
             self.client.record_outcome(reference_id=reference_id, outcome=outcome, session_id=run_id,
                                        signal=signal, rationale=rationale, agent_id=AGENT_ID)
@@ -155,7 +165,7 @@ class MubitMemory:
 
     def mirror_skill(self, skill) -> None:
         self.local.mirror_skill(skill)
-        if not self.project_id:
+        if not self.project_id or not self.remote:
             return
         try:
             self.client.create_skill({
