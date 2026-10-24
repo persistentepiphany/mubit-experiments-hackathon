@@ -53,7 +53,10 @@ esm_download_image = esm_base
 
 boltz_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .uv_pip_install("boltz==2.1.1")
+    # Boltz 2.1.1 leaves torch unpinned, and the newest torch is a CUDA 13 build whose NVRTC builtins are
+    # absent from the image. The cuEquivariance kernels it installs do not import against torch 2.7.1, so
+    # predictions run with --no_kernels.
+    .uv_pip_install("boltz==2.1.1", "torch==2.7.1")
     .add_local_python_source("labloop", ignore=["**/__pycache__/**", "**/*.pyc"])
 )
 boltz_download_image = (
@@ -189,8 +192,6 @@ def esmfold(args: dict) -> dict:
 @app.function(image=boltz_image, gpu="H100", volumes={BOLTZ_DIR: boltz_volume, ARTIFACTS: artifacts_volume},
               timeout=40 * 60)
 def boltz2(args: dict) -> dict:
-    import importlib.util
-
     from labloop.toolkit.structure import boltz_outputs, boltz_scores, boltz_yaml, normalise_chains, safe_name
 
     started = time.time()
@@ -207,8 +208,7 @@ def boltz2(args: dict) -> dict:
                "--output_format", "mmcif", "--override"]
     if args.get("use_msa_server", True):
         command.append("--use_msa_server")
-    if importlib.util.find_spec("cuequivariance_torch") is None:
-        command.append("--no_kernels")
+    command.append("--no_kernels")
     log = subprocess.run(command, capture_output=True, text=True)
     (out / "boltz.log").write_text(log.stdout[-20000:] + "\n" + log.stderr[-20000:])
     if log.returncode != 0:
