@@ -70,6 +70,7 @@ def fetch_pdb(args: dict[str, Any], artifacts_root: Path | None = None) -> dict[
         raise ValueError(f"not a PDB id: {pdb_id!r}")
     text = _get(RCSB.format(pdb_id=pdb_id)).decode()
     chains = chains_from_pdb(text)
+    first = next(iter(chains), "")
     n_atoms = sum(1 for line in text.splitlines() if line.startswith(("ATOM", "HETATM")))
     artifacts = {}
     if artifacts_root is not None:
@@ -78,7 +79,8 @@ def fetch_pdb(args: dict[str, Any], artifacts_root: Path | None = None) -> dict[
         (artifacts_root / rel).write_text(text)
         artifacts["structure"] = str(rel)
     return {"tool": "fetch_pdb", "scores": {"n_atoms": n_atoms, "n_chains": len(chains)},
-            "artifacts": artifacts, "data": {"chains": chains}}
+            "artifacts": artifacts,
+            "data": {"chains": chains, "first_chain_id": first, "first_chain_sequence": chains.get(first, "")}}
 
 
 def _plain(text: str | None) -> str:

@@ -91,11 +91,12 @@ CATALOG: dict[str, dict[str, Any]] = {
         "inputs": {"pdb_id": {"type": "string", "required": True, "description": "e.g. 1CRN"}},
         "scores": ["n_atoms", "n_chains"],
         "artifacts": ["structure"],
-        "data": ["chains"],
+        "data": ["chains", "first_chain_id", "first_chain_sequence"],
         "gpu": None,
         "typical_runtime_s": 3,
         "available": True,
-        "notes": "data.chains maps chain id to one-letter sequence read from ATOM records.",
+        "notes": "data.chains maps chain id to one-letter sequence read from ATOM records; chain ids are not known "
+                 "before the fetch, so feed a single-chain step from data.first_chain_sequence (a plain string).",
     },
     "literature_search": {
         "kind": "data",
