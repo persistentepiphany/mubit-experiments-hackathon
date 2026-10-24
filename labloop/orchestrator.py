@@ -53,8 +53,10 @@ def _short(result: dict[str, Any]) -> dict[str, Any]:
 
 class Loop:
     def __init__(self, state: StateRoot, *, models: Models, dispatcher: Dispatcher, memory: Memory,
-                 graders: list[DomainGrader] = (), artifacts_root: Path | None = None) -> None:
+                 graders: list[DomainGrader] = (), artifacts_root: Path | None = None,
+                 artifacts_reload=None) -> None:
         self.state = state
+        self.artifacts_reload = artifacts_reload
         self.models = models
         self.dispatcher = dispatcher
         self.memory = memory
@@ -316,6 +318,8 @@ class Loop:
             results = self.execute(frozen, inputs, run_id, run)
 
             phase("grade", "Grading the frozen checks.")
+            if self.artifacts_reload:
+                self.artifacts_reload()
             frozen, digest = pipeline.load_frozen(run.path)
             graded = grade(frozen, results, self.graders, self.artifacts_root)
             run.write_json("RESULTS.json", {"run_id": run_id, "plan_digest": digest,

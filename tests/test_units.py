@@ -88,3 +88,14 @@ def test_local_memory_recall(tmp_path):
     memory.remember("unrelated note about ligands", lesson_type="observation", run_id="r")
     found = memory.context("boltz iptm short chains", run_id="r")
     assert found[0]["content"].startswith("Boltz-2")
+
+
+def test_every_available_tool_has_a_modal_function():
+    import re
+    from pathlib import Path
+
+    from labloop import catalog
+
+    source = (Path(__file__).parents[1] / "modal_apps" / "tools_app.py").read_text()
+    defined = set(re.findall(r"@app\.function\([^)]*\)\s*\ndef (\w+)\(", source, re.S))
+    assert set(catalog.available()) <= defined

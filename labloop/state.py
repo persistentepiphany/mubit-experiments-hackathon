@@ -40,12 +40,13 @@ class WriteOnceError(RuntimeError):
 
 class StateRoot:
     def __init__(self, root: Path, commit: Callable[[], None] | None = None,
-                 reload: Callable[[], None] | None = None) -> None:
+                 reload: Callable[[], None] | None = None, create: bool = True) -> None:
         self.root = Path(root)
         self._commit = commit
         self._reload = reload
-        for sub in ("runs", "skills", "memory"):
-            (self.root / sub).mkdir(parents=True, exist_ok=True)
+        if create:
+            for sub in ("runs", "skills", "memory"):
+                (self.root / sub).mkdir(parents=True, exist_ok=True)
 
     @property
     def runs(self) -> Path:

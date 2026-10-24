@@ -49,7 +49,8 @@ class ModalDispatcher:
         for tool, indices in by_tool.items():
             if len(indices) > 1:
                 try:
-                    results = list(self._fn(tool).map([calls[i][1] for i in indices], return_exceptions=True))
+                    results = list(self._fn(tool).map([calls[i][1] for i in indices], return_exceptions=True,
+                                                         wrap_returned_exceptions=False))
                 except Exception as error:
                     results = [error] * len(indices)
                 for i, result in zip(indices, results):

@@ -1,0 +1,93 @@
+"""labloop-backend: the JSON API and the orchestrator, on Modal.
+
+The API is served with `@modal.asgi_app()` and only reads the `labloop-state`
+Volume. Each task runs in a spawned `orchestrate` call, the only writer of
+state, limited to one container so that two runs never write the skill store
+at once. Keys come from the Modal Secret `labloop-keys`.
+
+    modal secret create labloop-keys MUBIT_API_KEY=... ZAI_API_KEY=... [MOONSHOT_API_KEY=...] [MUBIT_PROJECT_ID=...]
+    modal deploy modal_apps/backend_app.py
+    modal run modal_apps/backend_app.py::retire --name <skill> --by "<person>" --reason "<why>"
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import modal
+
+app = modal.App("labloop-backend")
+
+STATE = Path("/state")
+ARTIFACTS = Path("/artifacts")
+state_volume = modal.Volume.from_name("labloop-state", create_if_missing=True)
+artifacts_volume = modal.Volume.from_name("labloop-artifacts", create_if_missing=True)
+calls = modal.Dict.from_name("labloop-calls", create_if_missing=True)
+keys = modal.Secret.from_name("labloop-keys")
+
+image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .uv_pip_install("anthropic==2.3.0", "mubit-sdk==0.13.2", "fastapi[standard]==0.162.0", "pydantic>=2.9",
+                    "jsonschema>=4.20", "PyYAML>=6.0")
+)
+_ppi = os.environ.get("PPI_HARNESS_PATH")
+if _ppi and Path(_ppi).is_dir():
+    # ppi-assure is optional; when a checkout is given at deploy time it is shipped for the domain grader.
+    image = image.env({"PPI_HARNESS_PATH": "/opt/ppi-harness"}).add_local_dir(
+        _ppi, "/opt/ppi-harness", ignore=[".git", "fixtures", "tests", "benchmarks"])
+image = image.add_local_python_source("labloop")
+
+
+@app.function(image=image, volumes={STATE: state_volume, ARTIFACTS: artifacts_volume}, secrets=[keys],
+              timeout=3 * 60 * 60, max_containers=1)
+def orchestrate(task: dict, run_id: str, force_skill: str | None = None) -> dict:
+    from labloop import memory
+    from labloop.dispatch import ModalDispatcher
+    from labloop.graders import default_graders
+    from labloop.models import AnthropicModels
+    from labloop.orchestrator import Loop
+    from labloop.state import StateRoot
+
+    state_volume.reload()
+    state = StateRoot(STATE, commit=state_volume.commit, reload=state_volume.reload)
+    loop = Loop(state, models=AnthropicModels(), dispatcher=ModalDispatcher(),
+                memory=memory.from_env(state.memory), graders=default_graders(),
+                artifacts_root=ARTIFACTS, artifacts_reload=artifacts_volume.reload)
+    return loop.run_task(task, run_id=run_id, force_skill=force_skill)
+
+
+@app.function(image=image, volumes={STATE: state_volume}, max_containers=1)
+def retire_skill(name: str, by: str, reason: str) -> dict:
+    """The human path to retiring a skill. No model call reaches this function."""
+    from labloop.skills import SkillStore, card
+    from labloop.state import StateRoot
+
+    state_volume.reload()
+    state = StateRoot(STATE)
+    skill = SkillStore(state.skills).retire(name, by=by, reason=reason)
+    state_volume.commit()
+    return card(skill)
+
+
+@app.local_entrypoint()
+def retire(name: str, by: str, reason: str) -> None:
+    print(retire_skill.remote(name, by, reason))
+
+
+@app.function(image=image, volumes={STATE: state_volume}, scaledown_window=300)
+@modal.asgi_app()
+def api():
+    from labloop.api import create_app
+    from labloop.state import StateRoot
+
+    state = StateRoot(STATE, reload=state_volume.reload, create=False)
+
+    def submit(task: dict, run_id: str, force_skill: str | None) -> None:
+        call = orchestrate.spawn(task, run_id, force_skill)
+        calls[run_id] = call.object_id
+
+    def is_submitted(run_id: str) -> bool:
+        return calls.contains(run_id)
+
+    return create_app(state, submit, is_submitted)
