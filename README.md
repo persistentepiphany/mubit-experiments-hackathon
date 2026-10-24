@@ -83,13 +83,15 @@ The providers are `mubit` at `https://api.mubit.ai/anthropic` with `MUBIT_API_KE
 | Tool | GPU | Image and weights |
 | --- | --- | --- |
 | `esmfold` | A10G | `transformers` 4.46.3 with `facebook/esmfold_v1`, cached on `labloop-weights-esmfold`. Inference runs with `HF_HUB_OFFLINE=1`. |
-| `boltz2` | H100 | `boltz==2.1.1` with `boltz-community/boltz-2` at revision `6fdef46d`, on `labloop-weights-boltz`, run as in Modal's published example. |
+| `boltz2` | H100 | `boltz==2.1.1` with torch pinned to 2.7.1 and `boltz-community/boltz-2` at revision `6fdef46d`, on `labloop-weights-boltz`, run with `--no_kernels`. |
 | `chai1` | H100 | `chai_lab==0.5.0` with torch 2.7.1 for CUDA 12.8 and `CHAI_DOWNLOADS_DIR` on `labloop-weights-chai`, run as in Modal's published example. |
 | `fetch_uniprot` | none | UniProtKB FASTA. |
 | `fetch_pdb` | none | RCSB PDB entry, with chain sequences read from the coordinates. |
 | `literature_search` | none | Europe PMC search with abstracts and optional open-access full-text excerpts. |
 
 ColabFold, ProteinMPNN, RFdiffusion, DiffDock, Protenix and AlphaFold 3 are catalogued as unavailable, so the planner never sees them. They become available when their functions are built and verified.
+
+Boltz 2.1.1 leaves torch unpinned. Unpinned, torch resolves to a CUDA 13 build whose NVRTC builtins are absent from the image, so the first reduction kernel fails to compile, which is why torch is pinned. With torch 2.7.1 the cuEquivariance kernels that Boltz installs do not import, so predictions run without them, which costs speed and not accuracy at these sizes.
 
 The download functions fill the weight Volumes once. `download_chai` also folds one short chain after fetching the listed files, so that any file Chai-1 fetches lazily lands on the Volume rather than being fetched during a request.
 
@@ -105,17 +107,24 @@ modal deploy modal_apps/backend_app.py
 
 `MOONSHOT_API_KEY` and `MUBIT_PROJECT_ID` may be added to the secret. `MUBIT_PROJECT_ID` enables the skill mirror. Deploying the backend with `PPI_HARNESS_PATH` pointing at a ppi-harness checkout ships ppi-assure into the image for the domain grader.
 
-The backend serves five endpoints.
+The backend serves the frontend at `/` and six endpoints.
 
 | Method and path | Effect |
 | --- | --- |
 | `POST /tasks` | Accepts `{"description", "inputs", "research_queries"?}`, spawns the orchestrator, and returns the run id. |
+| `GET /runs` | Lists recent runs with their phase, verdict and origin. |
 | `GET /runs/{id}` | Returns the run status, task, match decision, frozen plan and digest, inputs, experiments, decisions, research and results. |
 | `GET /skills` | Returns skill cards. Retired skills appear with `include_retired=true`. |
 | `GET /skills/{name}` | Returns the card and the full skill. |
 | `POST /skills/{name}/run` | Accepts `{"inputs", "description"?}` and runs that skill without matching or planning. |
 
-State lives on the `labloop-state` Volume. The orchestrator is the only process that writes it, and it commits after every phase and every wave. The API reloads the Volume before every read and never writes to it. Submitted runs are recorded in the Modal Dict `labloop-calls`, so a run that has not started yet reads as queued. Workers write only to `labloop-artifacts`, and the orchestrator reloads that Volume before grading.
+State lives on the `labloop-state` Volume. The orchestrator is the only process that writes it, and it commits after every phase and every wave. The API reloads the Volume before every read and never writes to it. Submitted runs are recorded in the Modal Dict `labloop-calls`, so a run that has not started yet reads as queued, and a run whose orchestrator call failed before writing state reads as an error. Workers write only to `labloop-artifacts`, and the orchestrator reloads that Volume before grading.
+
+## Frontend
+
+`labloop/web/index.html` is a single page served by the backend at `/`, built from the Folio design. It submits a free-text task or one of three templates (fold a protein with ESMFold, co-fold two chains with Boltz-2, fetch a UniProt entry and fold it), follows a run through its seven phases, and shows the frozen checks with their observed values, the step outputs, the frozen papers, the reviewer's summary and lessons, and any skill the run saved or used. It lists runs and skill cards, and runs a saved skill with new inputs. It uses no build step and no framework.
+
+The deployment is at `https://persistentepiphany--labloop-backend-api.us-east.modal.run`. The endpoint has no authentication, so anyone with the address can start runs that spend GPU time and model credit.
 
 ## Local use
 
@@ -136,13 +145,15 @@ The run state layout comes from `template/` of harness-experiments, and the lite
 
 The offline tests cover a first task that researches, plans, freezes, runs, grades and saves a skill, and a second task that reuses the skill without planning. They also cover rejected applicability answers, failing and unverifiable checks, the planner retry, a tampered plan, forced skill runs, retirement, and the API.
 
+On Modal, the ESMFold smoke fold of 30 residues returned mean pLDDT 89.7 in 20 seconds of GPU time. A two-chain Boltz-2 prediction of two 22-residue chains returned ipTM 0.88 in 44 seconds. The Chai-1 download folded one short chain on an H100 as its warmup. Through the deployed API, the first ESMFold task failed its frozen check `ptm >= 0.5` with pTM 0.494, and its reviewer recorded that the threshold was too strict for a 30-residue chain. The same task submitted again was planned with that lesson in view, froze a pTM floor of 0.3, passed, and was saved as a skill. A two-chain Boltz-2 task passed four checks and was saved as a skill, with ppi-assure reporting no blocking finding, and the identical task submitted again reused the skill without planning and passed. A UniProt task fetched hemoglobin alpha on Modal and folded it with pLDDT 94.7. An ESMFold task on crambin reused the ESMFold skill and failed its check with pLDDT 43.7, and that failure stands as evidence on the skill.
+
 Against the real services, the gateway served the Sonnet 5.5 and Haiku 5.5 models, and Z.AI served `glm-5.3`. Europe PMC, UniProt and RCSB answered from the local data tools. A live planning run produced a valid ESMFold pipeline, and a second produced a valid two-chain Boltz-2 pipeline, both frozen with checks. The live applicability role reused a seeded monomer skill for a single-chain task, quoting its condition exactly, and refused it for a heterodimer by its `not_for` clause.
 
 ## Limitations
 
-The Modal apps have not been deployed or run. The Modal token available when they were written had expired, so the images, the weight downloads and every GPU function are untested, and the first deployment may need version fixes, particularly for the ColabFold-free Chai-1 image and the Boltz kernels flag.
+No run has yet called Chai-1 through the loop. Its weights and its warmup fold are verified, so the function itself works, but no planner has chosen it.
 
-The Mubit memory API was not reachable. The SDK's HTTP routes reach the gateway at `api.mubit.ai`, which answers `unknown_route` for memory paths, and its gRPC transport returns an authentication error for the gateway key. Memory therefore falls back to the local JSONL copy, which recalls by word overlap rather than semantic similarity. The client stops calling the remote API for the rest of the process after the first such error.
+The Mubit memory API was not reachable. The SDK's HTTP routes reach the gateway at `api.mubit.ai`, which answers `unknown_route` for memory paths, and its gRPC transport returns an authentication error for the gateway key. Memory therefore falls back to the local JSONL copy on the state Volume, which recalls by word overlap rather than semantic similarity, and skills are not mirrored into Mubit. Skills live only in the state Volume, and matching reads them from there. Model calls do pass through the gateway and are recorded there. The client stops calling the remote API for the rest of the process after the first such error.
 
 Kimi was not checked. No Moonshot key was available, and the gateway exposes OpenRouter only through its OpenAI-format compatibility path, which the Anthropic-only call convention excludes.
 
