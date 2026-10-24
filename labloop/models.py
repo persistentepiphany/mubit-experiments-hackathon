@@ -1,8 +1,9 @@
 """Model calls by role, all in the Anthropic Messages format.
 
 Each role has a fixed system prompt (see `prompts.py`) and a default provider
-and model, written `provider:model` and overridable with the environment
-variable `LABLOOP_MODEL_<ROLE>`. The gateway groups calls with the same model
+and model, written `provider:model` or `provider:model@effort` and overridable
+with the environment variable `LABLOOP_MODEL_<ROLE>`. The effort, one of low,
+medium, high, xhigh and max, is sent as `output_config.effort`. The gateway groups calls with the same model
 and the same instructions into one task, so the instructions never carry
 task-specific text and each role keeps one model unless it is overridden.
 """
@@ -24,12 +25,18 @@ PROVIDERS: dict[str, dict[str, Any]] = {
 }
 
 ROLE_DEFAULTS = {
-    "planner": "mubit:claude-sonnet-5-5",
+    "planner": "mubit:claude-opus-5@high",
     "researcher": "mubit:claude-haiku-5-5",
     "extractor": "mubit:claude-haiku-5-5",
     "applicability": "mubit:claude-haiku-5-5",
-    "reviewer": "zai:glm-5.3",
+    "reviewer": "mubit:claude-opus-5@high",
 }
+
+
+EFFORTS = {"low", "medium", "high", "xhigh", "max"}
+# Models that take the server-side refusal fallback, which reroutes a declined request by refusal category.
+FALLBACK_MODELS = {"claude-opus-5", "claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5"}
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
 class ModelError(RuntimeError):
@@ -49,14 +56,17 @@ class Models(Protocol):
     def complete(self, role: str, user: str, *, run_id: str, max_tokens: int = 4096) -> Reply: ...
 
 
-def role_target(role: str) -> tuple[str, str]:
+def role_target(role: str) -> tuple[str, str, str | None]:
     spec = os.environ.get(f"LABLOOP_MODEL_{role.upper()}") or ROLE_DEFAULTS[role]
     provider, _, model = spec.partition(":")
+    model, _, effort = model.partition("@")
+    if effort and effort not in EFFORTS:
+        raise ModelError(f"effort {effort!r} for role {role} must be one of {sorted(EFFORTS)}")
     if provider not in PROVIDERS or not model:
         raise ModelError(f"model spec {spec!r} for role {role} must be provider:model, provider one of {sorted(PROVIDERS)}")
     if provider == "zai" and "[" in model:
         raise ModelError(f"Z.AI takes plain model ids; {model!r} carries a bracket suffix")
-    return provider, model
+    return provider, model, effort or None
 
 
 def _key(provider: str) -> str | None:
@@ -89,16 +99,25 @@ class AnthropicModels:
         return self._clients[provider]
 
     def complete(self, role: str, user: str, *, run_id: str, max_tokens: int = 4096) -> Reply:
-        provider, model = role_target(role)
+        provider, model, effort = role_target(role)
         kwargs: dict[str, Any] = {}
         if provider == "mubit":
             kwargs["metadata"] = {"user_id": run_id}  # the gateway's session key on Anthropic calls
-        response = self._client(provider).messages.create(
+        if effort:
+            kwargs["output_config"] = {"effort": effort}
+            max_tokens = max(max_tokens, 16000)  # thinking at higher effort shares this budget with the answer
+        messages = self._client(provider).messages
+        if provider != "zai" and model in FALLBACK_MODELS:
+            messages = self._client(provider).beta.messages
+            kwargs.update(betas=[FALLBACK_BETA], fallbacks="default")
+        response = messages.create(
             model=model, max_tokens=max_tokens, system=prompts.SYSTEM[role],
             messages=[{"role": "user", "content": user}], **kwargs)
+        if response.stop_reason == "refusal":
+            raise ModelError(f"{model} declined the {role} request: {getattr(response, 'stop_details', None)}")
         text = "".join(block.text for block in response.content if getattr(block, "type", "") == "text")
         usage = getattr(response, "usage", None)
-        return Reply(text=text, provider=provider, model=model,
+        return Reply(text=text, provider=provider, model=getattr(response, "model", model),
                      input_tokens=getattr(usage, "input_tokens", 0) or 0,
                      output_tokens=getattr(usage, "output_tokens", 0) or 0)
 

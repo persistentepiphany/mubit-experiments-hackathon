@@ -62,17 +62,17 @@ Memory is context and never authority. Lessons are recalled once, before matchin
 
 ## Models
 
-Every call uses the Anthropic Messages format through the `anthropic` SDK. Each role has one fixed system prompt in `labloop/prompts.py`, and all task-specific content, including the catalog, goes in the user message. Calls through the gateway carry the run id as `metadata.user_id`, which the gateway uses as the session key. The defaults below, whose exact model ids are in `ROLE_DEFAULTS` in `labloop/models.py`, can be changed with `LABLOOP_MODEL_<ROLE>`, written as `provider:model`.
+Every call uses the Anthropic Messages format through the `anthropic` SDK. Each role has one fixed system prompt in `labloop/prompts.py`, and all task-specific content, including the catalog, goes in the user message. Calls through the gateway carry the run id as `metadata.user_id`, which the gateway uses as the session key. The defaults below, whose exact model ids are in `ROLE_DEFAULTS` in `labloop/models.py`, can be changed with `LABLOOP_MODEL_<ROLE>`, written as `provider:model` or `provider:model@effort`, where the effort is sent as `output_config.effort`.
 
 | Role | Default | Purpose |
 | --- | --- | --- |
-| planner | Anthropic Sonnet 5.5 through `mubit` | Composes the pipeline and its checks. |
+| planner | Anthropic Opus 5 at high effort through `mubit` | Composes the pipeline and its checks. |
 | researcher | Anthropic Haiku 5.5 through `mubit` | Writes literature queries. |
 | extractor | Anthropic Haiku 5.5 through `mubit` | Extracts a paper's procedure. |
 | applicability | Anthropic Haiku 5.5 through `mubit` | Decides whether a saved skill fits. |
-| reviewer | GLM 5.3 through `zai` | Writes lessons after grading. |
+| reviewer | Anthropic Opus 5 at high effort through `mubit` | Writes lessons after grading. |
 
-The providers are `mubit` at `https://api.mubit.ai/anthropic` with `MUBIT_API_KEY` (or `MUBIT_API_TOKEN`), `zai` at `https://api.z.ai/api/anthropic` with `ZAI_API_KEY`, and `moonshot` at `https://api.moonshot.ai/anthropic` with `MOONSHOT_API_KEY`. Recording on the gateway follows `LABLOOP_MUBIT_RECORD` (default `full`) and `LABLOOP_MUBIT_STORE` (default `true`). Z.AI model ids are refused when they carry a bracket suffix.
+The providers are `mubit` at `https://api.mubit.ai/anthropic` with `MUBIT_API_KEY` (or `MUBIT_API_TOKEN`), `zai` at `https://api.z.ai/api/anthropic` with `ZAI_API_KEY`, and `moonshot` at `https://api.moonshot.ai/anthropic` with `MOONSHOT_API_KEY`. Recording on the gateway follows `LABLOOP_MUBIT_RECORD` (default `full`) and `LABLOOP_MUBIT_STORE` (default `true`). Z.AI model ids are refused when they carry a bracket suffix. Every default role goes through the gateway, because the gateway does not forward to Z.AI, so a role moved to `zai` is not recorded there. Calls to Opus 5, Opus 5.5, Sonnet 5.5 and Fable 5.1 enable the server-side refusal fallback, so a request one model declines is retried on another rather than failing the run.
 
 `python -m labloop.cli probe` makes one short call to every provider and model the roles use, and to Kimi when `MOONSHOT_API_KEY` is set (model from `LABLOOP_KIMI_MODEL`, default `kimi-k3[1m]`).
 
