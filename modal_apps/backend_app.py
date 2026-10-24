@@ -36,7 +36,7 @@ if _ppi and Path(_ppi).is_dir():
     # ppi-assure is optional; when a checkout is given at deploy time it is shipped for the domain grader.
     image = image.env({"PPI_HARNESS_PATH": "/opt/ppi-harness"}).add_local_dir(
         _ppi, "/opt/ppi-harness", ignore=[".git", "fixtures", "tests", "benchmarks"])
-image = image.add_local_python_source("labloop")
+image = image.add_local_python_source("labloop", ignore=["**/__pycache__/**", "**/*.pyc"])
 
 
 @app.function(image=image, volumes={STATE: state_volume, ARTIFACTS: artifacts_volume}, secrets=[keys],
@@ -87,7 +87,15 @@ def api():
         call = orchestrate.spawn(task, run_id, force_skill)
         calls[run_id] = call.object_id
 
-    def is_submitted(run_id: str) -> bool:
-        return calls.contains(run_id)
+    def call_state(run_id: str) -> str | None:
+        if not calls.contains(run_id):
+            return None
+        try:
+            modal.FunctionCall.from_id(calls[run_id]).get(timeout=0)
+        except TimeoutError:
+            return "queued"
+        except Exception as error:
+            return f"the orchestrator call failed before writing state: {type(error).__name__}: {error}"
+        return "the orchestrator call finished without writing state"
 
-    return create_app(state, submit, is_submitted)
+    return create_app(state, submit, call_state)

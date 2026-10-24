@@ -205,7 +205,7 @@ class Loop:
     def learn(self, task, run_id, plan, results, graded, decision, lessons_used, inputs_digest,
               plan_digest) -> dict[str, Any]:
         verdict = graded["verdict"]
-        lesson_ids, lesson_texts, review_error = [], [], None
+        lesson_ids, lesson_texts, review_error, summary = [], [], None, None
         user = json.dumps({
             "task": task["description"],
             "pipeline": {"steps": plan["steps"], "checks": plan["checks"]},
@@ -217,6 +217,7 @@ class Loop:
             review, _ = ask_json(self.models, "reviewer", user, run_id=run_id, max_tokens=2048,
                                  check=lambda r: [] if isinstance(r, dict) and isinstance(r.get("lessons"), list)
                                  else ["lessons must be a list"])
+            summary = str(review.get("summary") or "").strip() or None
             for lesson in review["lessons"][:8]:
                 text = str(lesson.get("content", "")).strip() if isinstance(lesson, dict) else str(lesson)
                 if not text:
@@ -252,7 +253,8 @@ class Loop:
                                        plan_digest=plan_digest, run_id=run_id)
             self.memory.mirror_skill(skill)
             skill_action = {"action": "created", "skill": skill["name"], "version": 1, "standing": standing(skill)}
-        return {"lessons": lesson_ids, "review_error": review_error, "skill": skill_action}
+        return {"lessons": lesson_ids, "lesson_texts": lesson_texts, "review_error": review_error,
+                "summary": summary, "skill": skill_action}
 
     # -------------------------------------------------------------------- all
     def run_task(self, task: dict[str, Any], run_id: str | None = None,
@@ -334,7 +336,8 @@ class Loop:
             run.state_md(f"Done. Verdict {graded['verdict']}.", list(progress.items()), findings_lines)
             memory_errors = list(getattr(self.memory, "errors", []))
             record = run.status("done", verdict=graded["verdict"], skill=learned["skill"],
-                                lessons=learned["lessons"], review_error=learned["review_error"],
+                                lessons=learned["lessons"], lesson_texts=learned["lesson_texts"],
+                                summary=learned["summary"], review_error=learned["review_error"],
                                 memory_errors=memory_errors[-5:])
         except Exception as error:
             record = run.status("error", error=f"{type(error).__name__}: {error}",

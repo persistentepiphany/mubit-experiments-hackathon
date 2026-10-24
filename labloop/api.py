@@ -11,12 +11,16 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from labloop.skills import SkillStore, card
 from labloop.state import RUN_ID, RunDir, StateRoot, new_run_id
 
+WEB = Path(__file__).parent / "web"
 Submit = Callable[[dict[str, Any], str, str | None], None]
 
 
@@ -31,7 +35,9 @@ class SkillRunIn(BaseModel):
     description: str | None = None
 
 
-def create_app(state: StateRoot, submit: Submit, is_submitted: Callable[[str], bool]) -> FastAPI:
+def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str | None]) -> FastAPI:
+    """`call_state(run_id)` is None for an unknown run, "queued" for a submitted run that has not
+    written state yet, and an error message for a submitted run whose orchestrator call failed."""
     app = FastAPI(title="labloop", version="0.1.0")
     skills = SkillStore(state.skills)
 
@@ -41,6 +47,25 @@ def create_app(state: StateRoot, submit: Submit, is_submitted: Callable[[str], b
         submit(task.model_dump(exclude_none=True), run_id, None)
         return {"run_id": run_id, "phase": "queued"}
 
+    @app.get("/", include_in_schema=False)
+    def index() -> FileResponse:
+        return FileResponse(WEB / "index.html", headers={"Cache-Control": "no-cache"})
+
+    @app.get("/runs")
+    def list_runs(limit: int = 50) -> dict[str, Any]:
+        state.reload()
+        runs = []
+        paths = sorted(state.runs.glob("r-*"), reverse=True)[: max(1, min(limit, 200))] if state.runs.exists() else []
+        for path in paths:
+            run = RunDir(path)
+            status = run.read_json("run.json", {}) or {}
+            task = run.read_json("task.json", {}) or {}
+            runs.append({"run_id": path.name, "description": task.get("description"), "phase": status.get("phase"),
+                         "verdict": status.get("verdict"), "origin": status.get("origin"),
+                         "skill": status.get("skill"),
+                         "started_at": (status.get("history") or [{}])[0].get("at")})
+        return {"runs": runs}
+
     @app.get("/runs/{run_id}")
     def get_run(run_id: str) -> dict[str, Any]:
         if not RUN_ID.match(run_id):
@@ -48,9 +73,12 @@ def create_app(state: StateRoot, submit: Submit, is_submitted: Callable[[str], b
         state.reload()
         path = state.run_dir(run_id)
         if not path.exists():
-            if is_submitted(run_id):
+            call = call_state(run_id)
+            if call is None:
+                raise HTTPException(404, "unknown run")
+            if call == "queued":
                 return {"run_id": run_id, "phase": "queued"}
-            raise HTTPException(404, "unknown run")
+            return {"run_id": run_id, "phase": "error", "status": {"phase": "error", "error": call}}
         run = RunDir(path)
         return {
             "run_id": run_id,

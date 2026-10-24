@@ -22,7 +22,8 @@ def test_api_round_trip(tmp_path):
         submitted.add(run_id)
         loop.run_task(task, run_id=run_id, force_skill=force_skill)
 
-    client = TestClient(create_app(StateRoot(state.root, create=False), submit, submitted.__contains__))
+    client = TestClient(create_app(StateRoot(state.root, create=False), submit,
+                                   lambda r: "queued" if r in submitted else None))
     first = client.post("/tasks", json={"description": "Fold a peptide", "inputs": {"sequence": "MKTAYIAKQRQ"}})
     assert first.status_code == 202
     run = client.get(f"/runs/{first.json()['run_id']}").json()
