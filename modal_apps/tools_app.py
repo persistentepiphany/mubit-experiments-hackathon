@@ -41,20 +41,20 @@ CHAI_FILES = ["conformers_v1.apkl"] + [f"models_v2/{n}.pt" for n in
                                         ("trunk", "token_embedder", "feature_embedding", "diffusion_module",
                                          "confidence_head")]
 
-cpu_image = modal.Image.debian_slim(python_version="3.12").add_local_python_source("labloop")
+cpu_image = modal.Image.debian_slim(python_version="3.12").add_local_python_source("labloop", ignore=["**/__pycache__/**", "**/*.pyc"])
 
-esm_image = (
+esm_base = (
     modal.Image.debian_slim(python_version="3.12")
     .uv_pip_install("torch==2.5.1", "transformers==4.46.3", "accelerate==1.1.1", "numpy==1.26.4")
-    .env({"HF_HOME": str(ESM_DIR / "hf"), "HF_HUB_OFFLINE": "1"})
-    .add_local_python_source("labloop")
+    .env({"HF_HOME": str(ESM_DIR / "hf")})
 )
-esm_download_image = esm_image.env({"HF_HUB_OFFLINE": "0"})
+esm_image = esm_base.env({"HF_HUB_OFFLINE": "1"}).add_local_python_source("labloop", ignore=["**/__pycache__/**", "**/*.pyc"])
+esm_download_image = esm_base
 
 boltz_image = (
     modal.Image.debian_slim(python_version="3.12")
     .uv_pip_install("boltz==2.1.1")
-    .add_local_python_source("labloop")
+    .add_local_python_source("labloop", ignore=["**/__pycache__/**", "**/*.pyc"])
 )
 boltz_download_image = (
     modal.Image.debian_slim(python_version="3.12")
@@ -67,7 +67,7 @@ chai_image = (
     .uv_pip_install("chai_lab==0.5.0")
     .uv_pip_install("torch==2.7.1", extra_index_url="https://download.pytorch.org/whl/cu128")
     .env({"CHAI_DOWNLOADS_DIR": str(CHAI_DIR)})
-    .add_local_python_source("labloop")
+    .add_local_python_source("labloop", ignore=["**/__pycache__/**", "**/*.pyc"])
 )
 
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
@@ -121,6 +121,7 @@ def download_boltz(force: bool = False) -> str:
 @app.function(image=chai_image, volumes={CHAI_DIR: chai_volume}, gpu="H100", timeout=60 * 60)
 def download_chai() -> str:
     """Fetch the listed weight files, then fold one short chain so any lazy download lands on the Volume."""
+    import urllib.error
     import urllib.request
 
     for name in CHAI_FILES:
@@ -128,7 +129,14 @@ def download_chai() -> str:
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
             tmp = target.with_suffix(target.suffix + ".part")
-            urllib.request.urlretrieve(f"{CHAI_ASSETS}/{name}", tmp)
+            # The asset host refuses Python's default user agent with 403.
+            request = urllib.request.Request(f"{CHAI_ASSETS}/{name}", headers={"User-Agent": "labloop/0.1"})
+            try:
+                with urllib.request.urlopen(request, timeout=600) as response, tmp.open("wb") as out:
+                    while chunk := response.read(1 << 22):
+                        out.write(chunk)
+            except urllib.error.HTTPError as error:
+                raise RuntimeError(f"{name}: HTTP {error.code}") from None
             tmp.replace(target)
     chai_volume.commit()
     _chai_predict({"chains": [{"id": "A", "sequence": "MKTAYIAKQRQISFVKSHFSRQ"}], "run_id": "warmup",
