@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.*
+state/
+.venv/
+*.egg-info/
+.claude/
+CLAUDE.md
+AGENTS.md
