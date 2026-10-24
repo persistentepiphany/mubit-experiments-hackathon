@@ -99,3 +99,9 @@ def test_every_available_tool_has_a_modal_function():
     source = (Path(__file__).parents[1] / "modal_apps" / "tools_app.py").read_text()
     defined = set(re.findall(r"@app\.function\([^)]*\)\s*\ndef (\w+)\(", source, re.S))
     assert set(catalog.available()) <= defined
+
+
+def test_europe_pmc_markup_is_removed_from_titles():
+    from labloop.toolkit.data import _plain
+
+    assert _plain("Docking &lt;i&gt;versus&lt;/i&gt; <i>co</i>-folding &amp; more") == "Docking versus co-folding & more"

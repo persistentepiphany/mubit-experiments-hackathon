@@ -214,7 +214,8 @@ class Loop:
             "grading": {"verdict": verdict, "checks": graded["checks"]},
         }, indent=1, default=str)
         try:
-            review, _ = ask_json(self.models, "reviewer", user, run_id=run_id, max_tokens=2048,
+            # The reviewer may be a reasoning model that spends part of its budget before answering.
+            review, _ = ask_json(self.models, "reviewer", user, run_id=run_id, max_tokens=8192,
                                  check=lambda r: [] if isinstance(r, dict) and isinstance(r.get("lessons"), list)
                                  else ["lessons must be a list"])
             summary = str(review.get("summary") or "").strip() or None

@@ -7,6 +7,7 @@ artifacts root, which is the `labloop-artifacts` Volume on Modal.
 
 from __future__ import annotations
 
+import html
 import json
 import re
 import urllib.error
@@ -80,6 +81,11 @@ def fetch_pdb(args: dict[str, Any], artifacts_root: Path | None = None) -> dict[
             "artifacts": artifacts, "data": {"chains": chains}}
 
 
+def _plain(text: str | None) -> str:
+    """Europe PMC titles and abstracts carry inline markup such as <i> and HTML entities."""
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", html.unescape(text or ""))).strip()
+
+
 def _strip_tags(xml: bytes) -> str:
     text = re.sub(rb"<[^>]+>", b" ", xml).decode("utf-8", "replace")
     return re.sub(r"\s+", " ", text).strip()
@@ -97,10 +103,10 @@ def literature_search(args: dict[str, Any], artifacts_root: Path | None = None) 
     for r in payload.get("resultList", {}).get("result", []):
         record = {
             "id": r.get("id"), "source": r.get("source"), "pmid": r.get("pmid"), "pmcid": r.get("pmcid"),
-            "doi": r.get("doi"), "title": r.get("title"), "year": r.get("pubYear"),
+            "doi": r.get("doi"), "title": _plain(r.get("title")), "year": r.get("pubYear"),
             "journal": (r.get("journalInfo") or {}).get("journal", {}).get("title"),
             "is_open_access": r.get("isOpenAccess"),
-            "abstract": re.sub(r"<[^>]+>", "", r.get("abstractText") or ""),
+            "abstract": _plain(r.get("abstractText")),
             "fulltext_excerpt": None,
         }
         if fulltext_chars and r.get("pmcid") and r.get("isOpenAccess") == "Y":
