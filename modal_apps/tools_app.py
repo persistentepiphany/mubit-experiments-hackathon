@@ -73,6 +73,17 @@ chai_image = (
     .add_local_python_source("labloop", ignore=["**/__pycache__/**", "**/*.pyc"])
 )
 
+PAPERQA_DIR = Path("/weights/paperqa")
+paperqa_volume = modal.Volume.from_name("labloop-weights-paperqa", create_if_missing=True)
+keys = modal.Secret.from_name("labloop-keys")
+paperqa_image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .uv_pip_install("torch==2.7.1", index_url="https://download.pytorch.org/whl/cpu")
+    .uv_pip_install("paper-qa[local,pymupdf]==2026.8.12")
+    .env({"HF_HOME": str(PAPERQA_DIR / "hf")})
+    .add_local_python_source("labloop", ignore=["**/__pycache__/**", "**/*.pyc"])
+)
+
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 _MODELS: dict = {}
 
@@ -148,9 +159,18 @@ def download_chai() -> str:
     return "chai-1 weights in labloop-weights-chai"
 
 
+@app.function(image=paperqa_image, volumes={PAPERQA_DIR: paperqa_volume}, timeout=20 * 60)
+def download_paperqa() -> str:
+    from sentence_transformers import SentenceTransformer
+
+    SentenceTransformer("multi-qa-MiniLM-L6-cos-v1")
+    paperqa_volume.commit()
+    return "PaperQA2 embedding model in labloop-weights-paperqa"
+
+
 @app.local_entrypoint()
 def download_all() -> None:
-    calls = [download_esmfold.spawn(), download_boltz.spawn(), download_chai.spawn()]
+    calls = [download_esmfold.spawn(), download_boltz.spawn(), download_chai.spawn(), download_paperqa.spawn()]
     for call in calls:
         print(call.get())
 
@@ -295,6 +315,52 @@ def literature_search(args: dict) -> dict:
     started = time.time()
     result = body(args)
     return {**result, "runtime_s": round(time.time() - started, 2), "versions": {}}
+
+
+@app.function(image=cpu_image, volumes={ARTIFACTS: artifacts_volume}, timeout=20 * 60)
+def literature_corpus(args: dict) -> dict:
+    """Search, rank, fetch full text and freeze a corpus, as the harness-experiments fetcher does."""
+    from labloop.toolkit.corpus import build
+
+    started = time.time()
+    out, rel = _out_dir(args, "literature_corpus")
+    result = build([str(q) for q in args["queries"]][:6], out / "corpus",
+                   page_size=max(1, min(int(args.get("page_size", 25)), 50)),
+                   max_docs=max(1, min(int(args.get("max_docs", 8)), 25)))
+    docs = result["documents"]
+    return _result("literature_corpus", started,
+                   {"n_documents": len(docs), "n_full_text": sum(d["full_text"] for d in docs),
+                    "searched": result["searched"]},
+                   {"corpus": rel / "corpus"},
+                   {"documents": docs, "manifest_sha256": result["manifest_sha256"], "errors": result["errors"]})
+
+
+@app.function(image=paperqa_image, volumes={ARTIFACTS: artifacts_volume, PAPERQA_DIR: paperqa_volume},
+              secrets=[keys], cpu=4.0, memory=8192, timeout=40 * 60)
+def paperqa(args: dict) -> dict:
+    """Answer questions over frozen corpora with PaperQA2, as harness-experiments lit/README.md runs it."""
+    import json as _json
+
+    from labloop.toolkit.readpapers import answer
+
+    started = time.time()
+    artifacts_volume.reload()
+    directories = []
+    for rel in args["corpora"]:
+        path = (ARTIFACTS / str(rel)).resolve()
+        if ARTIFACTS.resolve() not in path.parents or not path.is_dir():
+            raise ValueError(f"corpus {rel!r} is not a directory on the artifacts volume")
+        directories.append(path)
+    result = answer(directories, [str(q) for q in args["questions"]][:4],
+                    llm=str(args.get("llm", "mubit:claude-sonnet-5-5")),
+                    summary_llm=str(args.get("summary_llm", "mubit:claude-haiku-5-5")),
+                    evidence_k=int(args.get("evidence_k", 10)), max_sources=int(args.get("max_sources", 6)))
+    out, rel = _out_dir(args, "paperqa")
+    (out / "paperqa.json").write_text(_json.dumps(result, indent=1, default=str))
+    return _result("paperqa", started,
+                   {"n_documents": len(result["added"]), "n_answers": len(result["answers"]),
+                    "cost_usd": round(sum(a.get("cost_usd") or 0 for a in result["answers"]), 4)},
+                   {"answers": rel / "paperqa.json"}, result)
 
 
 # -------------------------------------------------------------------- smoke
