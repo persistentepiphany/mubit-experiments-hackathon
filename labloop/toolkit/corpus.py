@@ -27,7 +27,21 @@ _SECTION = re.compile(rb"<title[^>]*>(.*?)</title>", re.S)
 
 
 def jats_to_text(xml: bytes) -> str:
-    """Plain text from JATS XML, keeping section titles as their own lines."""
+    """Plain text from JATS XML: the title, the abstract and the body, with section titles as headings.
+
+    Journal front matter (identifiers, affiliations, licences) and back matter (references) are left
+    out, so readers and PaperQA2 see the paper rather than its metadata.
+    """
+    parts = []
+    title = re.search(rb"<article-title[^>]*>(.*?)</article-title>", xml, re.S)
+    if title:
+        parts.append(b"# " + re.sub(rb"<[^>]+>", b"", title.group(1)).strip())
+    for block, heading in ((rb"<abstract[^>]*>(.*?)</abstract>", b"## Abstract"), (rb"<body[^>]*>(.*)</body>", None)):
+        found = re.search(block, xml, re.S)
+        if found:
+            parts.append((heading + b"\n" if heading else b"") + found.group(1))
+    if len(parts) > 1:
+        xml = b"\n".join(parts)
     xml = _SECTION.sub(lambda m: b"\n\n## " + m.group(1) + b"\n", xml)
     xml = re.sub(rb"</(p|sec|abstract|caption|title-group)>", b"\n", xml)
     text = re.sub(rb"<[^>]+>", b" ", xml).decode("utf-8", "replace")

@@ -110,6 +110,34 @@ details summary{cursor:pointer;font-size:12.5px;color:#4a443c}details p{font-siz
 .tabs button.on{color:var(--ink);border-bottom-color:var(--ink)}
 [data-paper]{cursor:pointer}[data-paper]:hover .ot{text-decoration:underline}
 .sdetail.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+#view.enter{animation:rise .28s ease both}
+.card,.row,.skillcard,.tpl,.kpi,.flow .node{animation:rise .32s ease both}
+.grid>*:nth-child(2),.list>*:nth-child(2),.kpis>*:nth-child(2){animation-delay:.04s}
+.grid>*:nth-child(3),.list>*:nth-child(3),.kpis>*:nth-child(3){animation-delay:.08s}
+.grid>*:nth-child(4),.list>*:nth-child(4),.kpis>*:nth-child(4){animation-delay:.12s}
+.grid>*:nth-child(n+5),.list>*:nth-child(n+5),.kpis>*:nth-child(n+5){animation-delay:.16s}
+.card,.skillcard,.row,.tpl{transition:box-shadow .18s ease,transform .18s ease,border-color .18s ease}
+.skillcard:hover,.row:hover,.tpl:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(42,38,34,.08)}
+.sk{border-radius:12px;background:linear-gradient(90deg,#ece6db 0,#f6f1e8 40%,#ece6db 80%);background-size:800px 100%;animation:shimmer 1.2s linear infinite}
+.topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;padding:12px 56px;background:rgba(241,235,225,.88);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);font-size:12.5px}
+.topbar .crumb{font-weight:500}.topbar .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:#fff;border:1px solid var(--line);color:#4a443c;white-space:nowrap}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi{background:#fff;border-radius:14px;padding:14px 16px;border:1px solid var(--line)}
+.kpi .v{font-family:'Instrument Serif',serif;font-size:30px;line-height:1.1}.kpi .l{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.kpi .s{font-size:12px;color:var(--muted);margin-top:2px}
+.flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+.flow .node{flex:1;min-width:120px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.4}
+.flow .node b{display:block;font-weight:500;font-size:12.5px;margin-bottom:2px}
+.flow .arr{align-self:center;padding:0 6px;color:var(--muted)}
+.chain{display:grid;grid-template-columns:1fr 24px 1fr 24px 1fr;gap:6px;align-items:stretch}
+.chain .c{background:var(--soft);border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.45}
+.chain .a{align-self:center;text-align:center;color:var(--muted)}
+.delta{display:inline-flex;gap:6px;align-items:center;font-size:12px;padding:3px 9px;border-radius:999px;background:var(--slatebg)}
+.badge{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--bg)}.badge.m{background:var(--slatebg)}.badge.z{background:#f3e3da}
+.bar{height:6px;border-radius:3px;background:var(--bg);overflow:hidden}.bar>span{display:block;height:100%;background:var(--slate);transition:width .6s ease}
+@media (max-width:820px){.topbar{padding:10px 16px}.chain{grid-template-columns:1fr}.chain .a{transform:rotate(90deg)}}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:var(--soft);padding:12px;border-radius:10px;margin:0}
 @media (max-width:820px){
   .app{flex-direction:column}
@@ -128,11 +156,17 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:var(--
       <button class="navbtn" data-nav="home"><span class="dot" style="background:var(--olive)"></span>New task</button>
       <button class="navbtn" data-nav="runs"><span class="dot" style="background:var(--clay)"></span>Runs<span class="n" id="runCount"></span></button>
       <button class="navbtn" data-nav="skills"><span class="dot" style="background:var(--slate)"></span>Skills<span class="n" id="skillCount"></span></button>
+      <button class="navbtn" data-nav="learning"><span class="dot" style="background:#7a9a8a"></span>Learning</button>
       <button class="navbtn" data-nav="projects"><span class="dot" style="background:#b8a3c9"></span>Projects<span class="n" id="projectCount"></span></button>
     </div>
     <div class="foot">Tools run on Modal.<br>Every run is graded against checks frozen before it starts.</div>
   </nav>
-  <main id="view"></main>
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <div class="topbar" id="topbar"><span class="crumb" id="crumb">New task</span><span style="flex:1"></span>
+      <span class="pill" id="apiPill"><span class="dot" style="background:var(--muted)"></span>API</span>
+      <span class="pill" id="routePill">routing…</span><span class="pill" id="mubitPill">Mubit…</span></div>
+    <main id="view"></main>
+  </div>
 </div>
 <aside class="drawer" id="drawer" aria-label="Paper reader">
   <div class="dh"><div style="display:flex;align-items:center;gap:8px"><span class="eyebrow" id="drawerKind">Paper</span>
@@ -203,7 +237,33 @@ async function refreshCounts(){
     $('#runCount').textContent = S.runs.length || ''; $('#skillCount').textContent = S.skills.length || '';
     const projects = new Set(S.runs.map(r => r.project || 'General')); $('#projectCount').textContent = projects.size || ''; } catch(e) {}
 }
-function setNav(name){ document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('on', b.dataset.nav === name)); }
+function setNav(name){
+  if (S.lastNav === name + location.hash) { document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('on', b.dataset.nav === name)); return; }
+  S.lastNav = name + location.hash;
+  document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('on', b.dataset.nav === name));
+  $('#crumb').textContent = {home:'New task', runs:'Runs', skills:'Skills', projects:'Projects', learning:'Learning'}[name] || name;
+  const v = $('#view'); v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter');
+}
+function skeleton(n = 3){ return `<div class="stack" style="gap:16px"><div class="sk" style="height:44px;width:40%"></div>${Array.from({length:n},()=>'<div class="sk" style="height:120px"></div>').join('')}</div>`; }
+function countUp(){
+  document.querySelectorAll('[data-count]').forEach(el => {
+    const target = Number(el.dataset.count), dec = Number(el.dataset.dec || 0), suffix = el.dataset.suffix || '', t0 = performance.now();
+    const step = t => { const k = Math.min(1, (t - t0) / 700), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = (target * e).toFixed(dec) + suffix; if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  });
+}
+async function refreshStatus(){
+  try {
+    const l = await api('/learning');
+    $('#apiPill').innerHTML = '<span class="dot" style="background:var(--olive);animation:pulse 2.4s ease-in-out infinite"></span>API live';
+    const planner = (l.roles.find(r => r.role === 'planner') || {}).routed_to || '';
+    const viaMubit = planner.startsWith('mubit');
+    $('#routePill').innerHTML = `<span class="dot" style="background:${viaMubit?'var(--slate)':'var(--clay)'}"></span>planner · ${esc(planner.replace('mubit:','Mubit ').replace('zai:','Z.AI '))}`;
+    $('#mubitPill').textContent = `Mubit recorded ${l.totals.calls_recorded_by_mubit} of ${l.totals.calls} logged calls`;
+    S.learning = l;
+  } catch(e) { $('#apiPill').innerHTML = '<span class="dot" style="background:var(--fail)"></span>API unreachable'; }
+}
 document.querySelectorAll('.navbtn').forEach(b => b.onclick = () => go(b.dataset.nav === 'home' ? '#/' : `#/${b.dataset.nav}`));
 
 /* ---------------------------------------------------------------- home */
@@ -417,6 +477,22 @@ function paperAttrs(p, corpus){
   const file = p.file && corpus ? `${corpus}/${p.file}` : '';
   return `data-paper="${esc(JSON.stringify({title:p.title, doi:p.doi, year:p.year, citations:p.citations, pmcid:p.pmcid, text_source:p.text_source, file}))}"`;
 }
+function structurePaper(text, title){
+  // Frozen JATS text keeps journal front matter before the first section; drop it and lay out sections.
+  let lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const first = lines.findIndex(l => l.startsWith('## ') || /^abstract\b/i.test(l));
+  const lead = first > 0 ? lines.slice(0, first).find(l => /^abstract/i.test(l) || l.length > 400) : null;
+  if (first > 0) lines = lines.slice(first);
+  const out = []; let words = 0;
+  for (const l of lines) {
+    if (l.startsWith('# ')) continue;
+    if (l.startsWith('## ')) { const h = l.slice(3).trim(); if (h && h.toLowerCase() !== String(title||'').toLowerCase()) out.push(`<h4>${esc(h)}</h4>`); continue; }
+    if (/^(\d+\s*){3,}/.test(l) || /creative commons|licen[cs]e|©|doi\.org|^received|^accepted/i.test(l) && l.length < 600) continue;
+    out.push(`<p style="margin:0 0 10px">${esc(l)}</p>`); words += l.split(/\s+/).length;
+  }
+  if (lead && !out.length) out.push(`<p>${esc(lead)}</p>`);
+  return `<div class="small muted" style="margin-bottom:10px">${words.toLocaleString()} words · front matter removed</div>` + out.join('');
+}
 async function openPaper(p){
   const d = $('#drawer'); d.classList.add('open');
   $('#drawerKind').textContent = p.file ? (p.file.endsWith('.pdf') ? 'PDF' : p.text_source === 'abstract' ? 'Abstract' : 'Full text') : 'Paper';
@@ -432,7 +508,7 @@ async function openPaper(p){
   try {
     const r = await fetch(`/artifacts/${p.file}`); if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const text = await r.text();
-    body.innerHTML = `<div class="txt">${esc(text).replace(/^## (.*)$/gm, '<h4>$1</h4>')}</div>`;
+    body.innerHTML = `<div class="txt">${structurePaper(text, p.title)}</div>`;
   } catch(e) { body.innerHTML = `<div class="txt muted">The frozen copy could not be loaded (${esc(e.message)}).</div>`; }
 }
 $('#drawerClose').onclick = () => $('#drawer').classList.remove('open','wide');
@@ -474,10 +550,21 @@ function renderLearned(d){
     <div class="box"><span class="dot" style="background:var(--slate)"></span>${esc(sk.skill)}<span style="margin-left:auto">${standingPill(sk.standing)}</span></div>
     <div style="display:flex;justify-content:flex-end"><button class="primary" data-open="${esc(sk.skill)}">Open skill</button></div></div>`;
 }
+function renderCorrect(d, running){
+  if (running) return '';
+  const cs = d.corrections || [];
+  return `<div class="card" style="display:flex;flex-direction:column;gap:10px"><div class="cardhead"><span class="eyebrow">Correct this run</span><span class="small muted">becomes a rule the next plan follows</span></div>
+    ${cs.map(c => `<div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--soft);border-radius:10px">
+      <div class="small muted">“${esc(c.text)}” · ${esc(c.by)}</div>
+      <div class="small"><span class="badge ${c.recorded_by_mubit?'m':'z'}">${c.recorded_by_mubit?'recorded by Mubit':'not recorded by Mubit'}</span> <strong style="font-weight:500">${esc(c.role)} rule.</strong> ${esc(c.rule)}</div>
+      <div><button class="primary" style="padding:6px 12px;font-size:12px" data-rerun='${esc(JSON.stringify({corrects:d.run_id}))}'>Re-run with this correction</button></div></div>`).join('')}
+    <textarea id="corrText" rows="2" placeholder="e.g. The pTM threshold is too strict for a 30-residue peptide; use 0.3." style="width:100%;border:1px solid rgba(42,38,34,.1);border-radius:10px;padding:10px;font-size:13px;background:var(--soft)"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:8px;align-items:center"><span id="corrMsg" class="small muted"></span><button class="primary" id="corrSend">Submit correction</button></div></div>`;
+}
 function renderTabs(d, phase){
   const running = phase !== 'done' && phase !== 'error';
   const tabs = [
-    ['overview', 'Overview', renderInvocation(d) + renderSummary(d) + renderMetrics(d) + renderLearned(d)],
+    ['overview', 'Overview', renderInvocation(d) + renderSummary(d) + renderMetrics(d) + renderLearned(d) + renderCorrect(d, running)],
     ['structure', 'Structure', renderStructures(d) + renderOutputs(d)],
     ['studies', 'Studies', renderStudies(d) + renderPapers(d)],
     ['activity', running ? 'Activity · live' : 'Activity', renderActivity(d, phase)],
@@ -490,6 +577,7 @@ function renderTabs(d, phase){
 }
 async function renderRun(id){
   setNav('runs');
+  if (!$('#view').dataset.run || $('#view').dataset.run !== id) { $('#view').innerHTML = skeleton(); $('#view').dataset.run = id; }
   let d;
   try { d = await api(`/runs/${id}`); } catch(e) { $('#view').innerHTML = `<button class="back" onclick="go('#/runs')">← Runs</button><div class="err">${esc(e.message)}</div>`; return; }
   if (location.hash !== `#/runs/${id}`) return;
@@ -510,9 +598,20 @@ async function renderRun(id){
   document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => go(`#/skills/${b.dataset.open}`));
   document.querySelectorAll('[data-dismiss]').forEach(b => b.onclick = () => { S.dismissed[id] = true; renderRun(id); });
   document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { S.tab[id] = b.dataset.tab; renderRun(id); });
+  if ($('#corrSend')) $('#corrSend').onclick = async () => {
+    const text = $('#corrText').value.trim(); if (text.length < 5) { $('#corrMsg').textContent = 'Write the correction first.'; return; }
+    $('#corrSend').disabled = true; $('#corrMsg').textContent = 'Turning it into a rule…';
+    try { await api(`/runs/${id}/corrections`, {method:'POST', body:JSON.stringify({text})}); S.tab[id] = 'activity'; S.pollUntil = Date.now() + 120000; renderRun(id); }
+    catch(e) { $('#corrMsg').textContent = e.message; $('#corrSend').disabled = false; }
+  };
+  document.querySelectorAll('[data-rerun]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    try { const r = await api('/tasks', {method:'POST', body:JSON.stringify({description:d.task.description, inputs:d.task.inputs||{}, project:d.task.project||undefined, replan:true, corrects:id})}); go(`#/runs/${r.run_id}`); }
+    catch(e) { b.disabled = false; alert(e.message); }
+  });
   mountStructures();
   clearTimeout(S.timer);
-  if (phase !== 'done' && phase !== 'error') S.timer = setTimeout(() => renderRun(id), 2500);
+  if (phase !== 'done' && phase !== 'error' || (S.pollUntil && Date.now() < S.pollUntil)) S.timer = setTimeout(() => renderRun(id), 2500);
   else refreshCounts();
 }
 
@@ -596,7 +695,7 @@ function renderProvenance(s){
     <div class="small muted" style="line-height:1.5;margin-top:4px">Mubit mirror: the skill's description is sent to Mubit when its memory API is reachable with this key; otherwise it is kept on the state volume, which the planner and matcher read.</div></div>`;
 }
 async function renderSkill(name){
-  setNav('skills');
+  setNav('skills'); $('#view').innerHTML = skeleton();
   let d; try { d = await api(`/skills/${encodeURIComponent(name)}`); } catch(e) { $('#view').innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
   const s = d.skill, c = d.card;
   $('#view').innerHTML = `<div style="display:flex;flex-direction:column;gap:28px">
@@ -651,7 +750,7 @@ async function renderJob(){
 }
 
 async function renderProjects(){
-  setNav('projects');
+  setNav('projects'); $('#view').innerHTML = skeleton();
   let d; try { d = await api('/projects'); } catch(e) { $('#view').innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
   $('#view').innerHTML = `<div class="stack" style="gap:24px"><div><h1>Projects</h1><p class="sub">Runs grouped by project, with what each project has learned.</p></div>
     <div class="grid">${d.projects.map(p => { const total = Math.max(1, p.runs);
@@ -666,6 +765,74 @@ async function renderProjects(){
   document.querySelectorAll('[data-skill]').forEach(e => e.onclick = () => go(`#/skills/${e.dataset.skill}`));
 }
 
+function kpi(label, value, sub, opts = {}){
+  return `<div class="kpi"><div class="l">${esc(label)}</div><div class="v" data-count="${value}" data-dec="${opts.dec||0}" data-suffix="${opts.suffix||''}">0</div>${sub?`<div class="s">${esc(sub)}</div>`:''}</div>`;
+}
+function hourChart(rows, keys, colors){
+  if (!rows.length) return '<div class="small muted">No activity recorded yet.</div>';
+  const W = 640, H = 120, bw = Math.max(6, Math.min(28, (W - 20) / rows.length - 4));
+  const max = Math.max(1, ...rows.map(r => keys.reduce((a, k) => a + (r[k] || 0), 0)));
+  const bars = rows.map((r, i) => { let y = H - 18; const x = 10 + i * (W - 20) / rows.length;
+    return keys.map(k => { const h = (r[k] || 0) * (H - 30) / max; y -= h; return h ? `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="2" fill="${colors[k]}"><title>${esc(r.hour)} ${k} ${r[k]}</title></rect>` : ''; }).join('')
+      + (i % Math.ceil(rows.length / 6) === 0 ? `<text x="${x}" y="${H-4}" font-size="10" fill="#8a847a">${esc(r.hour.slice(11,16))}</text>` : ''); }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%">${bars}</svg><div class="small muted" style="display:flex;gap:12px;flex-wrap:wrap">${keys.map(k=>`<span><span class="dot" style="background:${colors[k]}"></span> ${esc(k)}</span>`).join('')}</div>`;
+}
+function checkChange(c){ const f = x => `${x.op || '≈'} ${fmtNum(x.value ?? x.reference)}`; return `<span class="delta">${esc(String(c.metric).split('.').pop())} ${f(c.before)} → ${f(c.after)}</span>`; }
+async function renderLearning(){
+  setNav('learning'); $('#view').innerHTML = skeleton(4);
+  let L; try { L = await api('/learning'); } catch(e) { $('#view').innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const T = L.totals, R = L.refresh;
+  const passRate = T.runs ? 100 * T.passed / T.runs : 0;
+  const mubitShare = T.calls ? 100 * T.calls_recorded_by_mubit / T.calls : 0;
+  const corrections = L.corrections, fixups = L.fixups;
+  const roles = L.roles.filter(r => r.calls || r.routed_to);
+  $('#view').innerHTML = `<div class="stack" style="gap:30px">
+    <div><h1>Learning</h1><p class="sub">How corrections, failures and new papers change what the system does next, and which calls Mubit can learn from.</p></div>
+    <div class="kpis">${kpi('Runs', T.runs, `${T.passed} passed`)}${kpi('Pass rate', passRate, 'of all runs', {dec:0, suffix:'%'})}${kpi('Corrections', R.corrections_total, 'from people')}${kpi('Lessons', R.lessons_total, 'kept in memory')}${kpi('Mubit-recorded calls', mubitShare, `${T.calls_recorded_by_mubit} of ${T.calls} in the ledger`, {suffix:'%'})}${kpi('Knowledge versions', R.knowledge.length, 'model-paper cards')}</div>
+
+    <div><h2>A correction becoming an update</h2>
+      <div class="flow" style="margin-bottom:14px">
+        <div class="node"><b>1 · Person corrects a run</b>From the run's Overview tab.</div><span class="arr">→</span>
+        <div class="node"><b>2 · Corrector role</b>Turns it into a rule. A fixed prompt, so Mubit records every correction as one task.</div><span class="arr">→</span>
+        <div class="node"><b>3 · Rule in memory</b>Stored as a correction lesson that outranks the system's own.</div><span class="arr">→</span>
+        <div class="node"><b>4 · Re-run, fresh plan</b>The planner applies the rule and records it as a decision.</div><span class="arr">→</span>
+        <div class="node"><b>5 · Model update</b>Corrected planner and corrector calls are kept examples; Mubit trains each role's adapter on them.</div></div>
+      <div class="list">${corrections.length ? corrections.map(c => `<div class="card" style="display:flex;flex-direction:column;gap:10px">
+        <div class="chain"><div class="c"><div class="eyebrow">Run</div>${verdictPill('done', c.run.verdict)} <a href="#/runs/${esc(c.run.run_id)}">${esc(c.run.run_id)}</a><div class="muted" style="margin-top:4px">${esc(String(c.run.description).slice(0,90))}</div></div>
+          <div class="a">→</div><div class="c"><div class="eyebrow">Correction → ${esc(c.role)} rule</div>“${esc(c.text)}”<div style="margin-top:6px">${esc(c.rule)}</div><div style="margin-top:6px"><span class="badge ${c.recorded_by_mubit?'m':'z'}">${c.recorded_by_mubit?'recorded by Mubit':'routed to '+esc(c.model||'')}</span></div></div>
+          <div class="a">→</div><div class="c"><div class="eyebrow">Next run</div>${c.followups.length ? c.followups.map(f => `${verdictPill(f.phase||'done', f.verdict)} <a href="#/runs/${esc(f.run_id)}">${esc(f.run_id)}</a><div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${f.diff.checks_changed.map(checkChange).join('') || '<span class="muted small">no check changed</span>'}</div>`).join('<hr style="border:0;border-top:1px solid var(--line)">') : '<span class="muted">Not re-run yet. Use “Re-run with this correction” on the run.</span>'}</div></div></div>`).join('')
+        : '<div class="card small muted" style="line-height:1.6">No corrections yet. Open a finished run, write what was wrong under “Correct this run”, then re-run it. The correction, its rule and the changed plan appear here.</div>'}</div></div>
+
+    <div><h2>Failures fixed by the system</h2>
+      <div class="list">${fixups.length ? fixups.map(f => `<div class="card"><div class="chain">
+        <div class="c"><div class="eyebrow">Before</div>${verdictPill('done', f.before.verdict)} <a href="#/runs/${esc(f.before.run_id)}">${esc(f.before.run_id)}</a><div class="muted" style="margin-top:4px">${esc(String(f.task).slice(0,90))}</div>${f.error?`<div class="small" style="color:var(--fail);margin-top:4px">${esc(String(f.error).slice(0,120))}</div>`:''}</div>
+        <div class="a">→</div><div class="c"><div class="eyebrow">What changed</div><div style="display:flex;gap:6px;flex-wrap:wrap">${f.diff.checks_changed.map(checkChange).join('')}${f.diff.steps_before.join(' → ') !== f.diff.steps_after.join(' → ') ? `<span class="delta">${esc(f.diff.steps_before.join(' → '))} ⇒ ${esc(f.diff.steps_after.join(' → '))}</span>` : ''}</div>${f.lessons_carried.length ? `<div class="small muted" style="margin-top:6px">${f.lessons_carried.slice(0,2).map(l=>'• '+esc(String(l).slice(0,160))).join('<br>')}</div>` : '<div class="small muted" style="margin-top:6px">Fixed in the tools or prompts between the runs.</div>'}</div>
+        <div class="a">→</div><div class="c"><div class="eyebrow">After</div>${verdictPill('done', f.after.verdict)} <a href="#/runs/${esc(f.after.run_id)}">${esc(f.after.run_id)}</a></div></div></div>`).join('') : '<div class="small muted">None yet.</div>'}</div></div>
+
+    <div><h2>Recurring tasks on Mubit</h2>
+      <p class="sub" style="margin-bottom:12px">Each role sends one fixed instruction, so the gateway groups its calls into one task and can train an adapter for it. Its digest below identifies the task.</p>
+      <div class="card" style="padding:6px 16px"><table class="t"><tr><th>Role</th><th>Routed to</th><th>Task digest</th><th>Calls</th><th style="width:28%">Recorded by Mubit</th></tr>
+        ${roles.map(r => { const pct = r.calls ? 100 * r.recorded_by_mubit / r.calls : 0, mub = String(r.routed_to||'').startsWith('mubit');
+          return `<tr><td><strong style="font-weight:500">${esc(r.role)}</strong></td><td><span class="badge ${mub?'m':'z'}">${esc(String(r.routed_to||'').replace('mubit:','Mubit · ').replace('zai:','Z.AI · '))}</span></td><td class="muted">${esc((r.prompt_digests||[]).join(', ') || '—')}</td><td>${r.calls}</td><td><div class="bar"><span style="width:${pct}%"></span></div><div class="small muted">${r.recorded_by_mubit} of ${r.calls}</div></td></tr>`; }).join('')}</table></div></div>
+
+    <div><h2>Closed and open models, side by side</h2>
+      <p class="sub" style="margin-bottom:12px">Per role and model, from the call ledger. Closed models run through Mubit and are recorded; GLM 5.3 is an open-weight model served by Z.AI.</p>
+      <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">${roles.filter(r => r.by_model.length).map(r => { const maxLat = Math.max(1, ...r.by_model.map(m => m.median_latency_s || 0));
+        return `<div class="skillcard"><div style="display:flex;align-items:baseline;gap:8px"><strong style="font-weight:500">${esc(r.role)}</strong><span class="small muted" style="margin-left:auto">${r.calls} calls</span></div>
+        ${r.by_model.map(m => `<div style="display:flex;flex-direction:column;gap:4px"><div class="small" style="display:flex;gap:6px;align-items:center"><span class="badge ${m.recorded_by_mubit?'m':'z'}">${m.recorded_by_mubit?'closed · Mubit':'open · '+esc(m.provider)}</span>${esc(m.model)}</div>
+          <div class="bar"><span style="width:${100*(m.median_latency_s||0)/maxLat}%;background:${m.recorded_by_mubit?'var(--slate)':'var(--clay)'}"></span></div>
+          <div class="small muted">${m.median_latency_s ?? '—'} s median · ${m.median_input_tokens ?? '—'} in / ${m.median_output_tokens ?? '—'} out tokens · ${m.cost_per_call_usd != null ? '$' + m.cost_per_call_usd.toFixed(4) + ' per call' : 'price not published'} · ${Math.round(100*m.ok_rate)}% ok · ${m.runs_passed}/${m.runs} runs passed</div></div>`).join('')}</div>`; }).join('') || '<div class="small muted">No calls logged yet.</div>'}</div>
+      ${T.runs_without_ledger ? `<div class="small muted" style="margin-top:8px;line-height:1.5">${T.runs_without_ledger} earlier runs predate the call ledger; they ran their roles on closed models through Mubit and appear in Mubit's Requests view rather than here.</div>` : ''}</div>
+
+    <div><h2>Fast refresh</h2>
+      <div class="cols" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+        <div class="card"><div class="eyebrow" style="margin-bottom:8px">Runs per hour</div>${hourChart(R.runs_by_hour, ['PASS','FAIL','INCONCLUSIVE','error'], {PASS:'#a3a07a', FAIL:'#b4654f', INCONCLUSIVE:'#c9c3b8', error:'#e3c2b8'})}</div>
+        <div class="card"><div class="eyebrow" style="margin-bottom:8px">Lessons learned per hour</div>${hourChart(R.lessons_by_hour, ['tool_knowledge','success','failure','fix','observation','correction'], {tool_knowledge:'#8da2b8', success:'#a3a07a', failure:'#b4654f', fix:'#c9937a', observation:'#c9c3b8', correction:'#7a9a8a'})}</div></div>
+      <div class="grid" style="margin-top:12px">${Object.values(R.knowledge.reduce((a, c) => { (a[c.tool] = a[c.tool] || []).push(c); return a; }, {})).map(vs => `<div class="skillcard"><strong style="font-weight:500">${esc(vs[0].title)}</strong>${vs.map(v => `<div class="small" style="display:flex;gap:8px"><span class="badge">v${v.version}</span><span class="muted">${esc(ago(v.ingested_at))}</span><span style="margin-left:auto">${v.numbers} numbers · ${v.guidance} guidance</span></div>`).join('')}</div>`).join('')}</div></div>
+  </div>`;
+  countUp();
+}
+
 /* ---------------------------------------------------------------- router */
 async function route(){
   clearTimeout(S.timer);
@@ -676,10 +843,11 @@ async function route(){
   if ((m = h.match(/^\/skills\/([a-z0-9_]+)$/))) return renderSkill(m[1]);
   if (h === '/skills') return renderSkills();
   if (h === '/projects') return renderProjects();
+  if (h === '/learning') return renderLearning();
   await refreshCounts(); renderHome();
 }
 window.addEventListener('hashchange', route);
-refreshCounts().then(route);
+refreshCounts().then(route); refreshStatus(); setInterval(refreshStatus, 30000);
 </script>
 </body>
 </html>
