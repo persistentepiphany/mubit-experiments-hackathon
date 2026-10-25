@@ -216,7 +216,12 @@ function phaseDetail(key, d){
         ? {detail:`Reused a saved skill. Matched “${m.matched_applies_when || m.reason}”.`, tag:m.skill}
         : {detail: m.candidates && m.candidates.length ? (m.reason || 'No saved skill fits.') : 'No saved skills yet, so a new pipeline is planned.'};
     case 'research': if (!res) return {};
-      return {detail:`${res.queries.length} ${res.queries.length===1?'query':'queries'}, ${res.papers.length} ${res.papers.length===1?'paper':'papers'} frozen, ${(res.extractions||[]).filter(e=>e.relevant).length} judged relevant.${res.stopped_early?' Stopped at the token budget.':''}`};
+      { const full = (res.papers||[]).filter(p=>p.full_text||(p.text_source&&p.text_source!=='abstract')).length;
+        const pq = res.paperqa; const ex = res.extraction || {};
+        const cited = pq ? new Set(pq.answers.flatMap(a=>(a.contexts||[]).map(c=>c.citation))).size : 0;
+        return {detail:`${res.queries.length} ${res.queries.length===1?'query':'queries'} · ${res.papers.length} papers frozen (${full} full text) · `
+          + (pq ? `PaperQA2 read ${pq.documents} papers and cited ${cited}` : 'PaperQA2 did not run')
+          + ` · ${(ex.reported_numbers||[]).length} sourced numbers.${(res.errors||[]).length?' '+res.errors[0].slice(0,160):''}`}; }
     case 'plan': if (!plan) return {};
       return {detail:`${plan.steps.map(s=>s.tool).join(' → ')}, with ${plan.checks.length} acceptance ${plan.checks.length===1?'check':'checks'}.`};
     case 'freeze': return d.plan_sha256 ? {detail:`Plan frozen as sha-256 ${d.plan_sha256.slice(0,12)}… before any step ran.`} : {};
@@ -334,8 +339,19 @@ async function renderSkills(){
       <div class="kv">${esc(s.description)}</div>
       <div class="pills">${s.tools.map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:auto">${standingPill(s.standing)}<span class="small muted">${s.passes} of ${s.runs} runs passed · v${s.version}</span></div>
-    </div>`).join('') : '<div class="muted small">No skills yet. A run that passes its checks saves its pipeline here.</div>'}</div></div>`;
+    </div>`).join('') : '<div class="muted small">No skills yet. A run that passes its checks saves its pipeline here.</div>'}</div>
+    <div><h2>Tool knowledge</h2><p class="sub" style="margin-bottom:14px">Read by PaperQA2 from each model's own method papers. The planner sees these cards.</p>
+    <div class="grid" id="knowledge"><div class="muted small">Loading…</div></div></div></div>`;
   document.querySelectorAll('[data-skill]').forEach(e => e.onclick = () => go(`#/skills/${e.dataset.skill}`));
+  try {
+    const k = await api('/knowledge');
+    $('#knowledge').innerHTML = k.tools.length ? k.tools.map(t => `<div class="skillcard">
+      <div style="display:flex;align-items:center;gap:8px"><span class="dot" style="background:${t.deployed?'var(--olive)':'var(--muted)'}"></span><span style="font-size:14.5px;font-weight:500">${esc(t.title)}</span><span class="small muted" style="margin-left:auto">${t.deployed?'deployed':'not deployed'} · v${t.version}</span></div>
+      <div class="kv">${esc(t.summary||'')}</div>
+      ${t.guidance.slice(0,3).map(g=>`<div class="small" style="line-height:1.5">• ${esc(g.statement)} <span class="muted">(${esc(String(g.source||'').slice(0,60))})</span></div>`).join('')}
+      <div class="small muted" style="margin-top:auto">${t.papers.length} papers · ${t.guidance.length} guidance · ${t.reported_numbers.length} numbers${t.papers_missing.length?` · ${t.papers_missing.length} not found`:''}</div>
+    </div>`).join('') : '<div class="muted small">No tool knowledge yet.</div>';
+  } catch(e) { $('#knowledge').innerHTML = `<div class="small" style="color:var(--fail)">${esc(e.message)}</div>`; }
 }
 async function renderSkill(name){
   setNav('skills');
