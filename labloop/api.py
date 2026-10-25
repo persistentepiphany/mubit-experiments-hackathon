@@ -14,9 +14,10 @@ from typing import Any, Callable
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
+from labloop.bundle import run_bundle
 from labloop.events import in_flight, read as read_events
 from labloop.skills import SkillStore, card
 from labloop.state import RUN_ID, RunDir, StateRoot, new_run_id
@@ -25,19 +26,26 @@ WEB = Path(__file__).parent / "web"
 Submit = Callable[[dict[str, Any], str, str | None], None]
 
 
+ARTIFACT_TYPES = {".pdb": "chemical/x-pdb", ".cif": "chemical/x-cif", ".json": "application/json",
+                  ".png": "image/png", ".txt": "text/plain; charset=utf-8", ".pdf": "application/pdf"}
+
+
 class TaskIn(BaseModel):
     description: str = Field(min_length=3, max_length=4000)
+    project: str | None = Field(default=None, max_length=80)
     inputs: dict[str, Any] = Field(default_factory=dict)
     research_queries: list[str] | None = None
 
 
 class SkillRunIn(BaseModel):
     inputs: dict[str, Any]
+    project: str | None = Field(default=None, max_length=80)
     description: str | None = None
 
 
 def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str | None],
-               refresh_knowledge: Callable[[list[str] | None], str] | None = None) -> FastAPI:
+               refresh_knowledge: Callable[[list[str] | None], str] | None = None,
+               artifacts_root: Path | None = None, artifacts_reload: Callable[[], None] | None = None) -> FastAPI:
     """`call_state(run_id)` is None for an unknown run, "queued" for a submitted run that has not
     written state yet, and an error message for a submitted run whose orchestrator call failed."""
     app = FastAPI(title="labloop", version="0.1.0")
@@ -63,7 +71,8 @@ def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str
             status = run.read_json("run.json", {}) or {}
             task = run.read_json("task.json", {}) or {}
             events = read_events(path / "EVENTS.jsonl") if status.get("phase") not in ("done", "error") else []
-            runs.append({"activity": events[-1] if events else None,
+            runs.append({"project": task.get("project") or "General",
+                         "activity": events[-1] if events else None,
                          "in_flight": in_flight(events),
                          "run_id": path.name, "description": task.get("description"), "phase": status.get("phase"),
                          "verdict": status.get("verdict"), "origin": status.get("origin"),
@@ -84,21 +93,68 @@ def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str
             if call == "queued":
                 return {"run_id": run_id, "phase": "queued"}
             return {"run_id": run_id, "phase": "error", "status": {"phase": "error", "error": call}}
-        run = RunDir(path)
-        return {
-            "run_id": run_id,
-            "status": run.read_json("run.json", {}),
-            "task": run.read_json("task.json"),
-            "match": run.read_json("match.json"),
-            "plan": run.read_json("plan.json"),
-            "plan_sha256": (path / "plan.sha256").read_text().split()[0] if (path / "plan.sha256").exists() else None,
-            "inputs": run.read_json("inputs.json"),
-            "experiments": run.read_jsonl("EXPERIMENTS.jsonl"),
-            "decisions": run.read_jsonl("DECISIONS.jsonl"),
-            "results": run.read_json("RESULTS.json"),
-            "research": run.read_json("research/extractions.json"),
-            "events": read_events(path / "EVENTS.jsonl"),
-        }
+        return run_bundle(path)
+
+    @app.get("/runs/{run_id}/report", response_class=HTMLResponse)
+    def get_report(run_id: str):
+        state.reload()
+        path = state.root / "reports" / run_id / "report.html"
+        if not RUN_ID.match(run_id) or not path.exists():
+            raise HTTPException(404, "no report for this run")
+        html = path.read_text("utf-8").replace('src="figures/', f'src="/runs/{run_id}/report/figures/')
+        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+
+    @app.get("/runs/{run_id}/report/figures/{name}")
+    def get_figure(run_id: str, name: str):
+        path = state.root / "reports" / run_id / "figures" / name
+        if not RUN_ID.match(run_id) or "/" in name or not name.endswith(".png") or not path.exists():
+            raise HTTPException(404, "no such figure")
+        return FileResponse(path, media_type="image/png")
+
+    @app.get("/artifacts/{rel:path}")
+    def get_artifact(rel: str):
+        if artifacts_root is None:
+            raise HTTPException(501, "artifacts are not mounted here")
+        path = (artifacts_root / rel).resolve()
+        if artifacts_root.resolve() not in path.parents or path.suffix not in ARTIFACT_TYPES:
+            raise HTTPException(404, "no such artifact")
+        if not path.exists() and artifacts_reload:
+            artifacts_reload()
+        if not path.exists():
+            raise HTTPException(404, "no such artifact")
+        return FileResponse(path, media_type=ARTIFACT_TYPES[path.suffix],
+                            headers={"Content-Disposition": f'inline; filename="{path.name}"'})
+
+    @app.get("/projects")
+    def projects() -> dict[str, Any]:
+        state.reload()
+        grouped: dict[str, dict[str, Any]] = {}
+        for path in sorted(state.runs.glob("r-*")) if state.runs.exists() else []:
+            run = RunDir(path)
+            task = run.read_json("task.json", {}) or {}
+            status = run.read_json("run.json", {}) or {}
+            name = task.get("project") or "General"
+            g = grouped.setdefault(name, {"name": name, "runs": 0, "PASS": 0, "FAIL": 0, "INCONCLUSIVE": 0,
+                                          "errors": 0, "running": 0, "skills_created": [], "skills_used": [],
+                                          "latest": None, "recent": []})
+            g["runs"] += 1
+            verdict, phase = status.get("verdict"), status.get("phase")
+            if phase == "done" and verdict in ("PASS", "FAIL", "INCONCLUSIVE"):
+                g[verdict] += 1
+            elif phase == "error":
+                g["errors"] += 1
+            else:
+                g["running"] += 1
+            sk = status.get("skill") or {}
+            if sk.get("action") == "created":
+                g["skills_created"].append(sk["skill"])
+            elif sk.get("skill") and sk["skill"] not in g["skills_used"]:
+                g["skills_used"].append(sk["skill"])
+            started = (status.get("history") or [{}])[0].get("at")
+            g["latest"] = max(filter(None, [g["latest"], started]), default=None)
+            g["recent"] = ([{"run_id": path.name, "description": task.get("description"), "phase": phase,
+                             "verdict": verdict}] + g["recent"])[:6]
+        return {"projects": sorted(grouped.values(), key=lambda g: g["latest"] or "", reverse=True)}
 
     @app.get("/knowledge")
     def knowledge() -> dict[str, Any]:
@@ -111,7 +167,7 @@ def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str
                            "ingested_at": c.get("ingested_at"), "papers": c.get("papers", []),
                            "papers_missing": c.get("papers_missing", []), "guidance": c.get("guidance", []),
                            "reported_numbers": c.get("reported_numbers", []),
-                           "limitations": c.get("limitations", [])} for c in cards]}
+                           "limitations": c.get("limitations", []), "corpus": c.get("corpus")} for c in cards]}
 
     @app.post("/knowledge/refresh", status_code=202)
     def refresh(tools: list[str] | None = None) -> dict[str, Any]:
@@ -150,7 +206,7 @@ def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str
         skill = skills.get(name)
         if skill is None:
             raise HTTPException(404, "unknown skill")
-        return {"card": card(skill), "skill": skill}
+        return {"card": card(skill), "skill": skill, "consultations": skills.consultations(name)}
 
     @app.post("/skills/{name}/run", status_code=202)
     def run_skill(name: str, body: SkillRunIn) -> dict[str, Any]:
@@ -165,7 +221,7 @@ def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str
             raise HTTPException(422, f"missing inputs: {missing}")
         run_id = new_run_id()
         task = {"description": body.description or f"Run skill {name}: {skill['description']}",
-                "inputs": body.inputs}
+                "inputs": body.inputs, **({"project": body.project} if body.project else {})}
         submit(task, run_id, name)
         return {"run_id": run_id, "phase": "queued", "skill": name}
 

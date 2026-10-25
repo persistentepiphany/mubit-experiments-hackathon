@@ -107,14 +107,15 @@ class AnthropicModels:
             kwargs["output_config"] = {"effort": effort}
             max_tokens = max(max_tokens, 16000)  # thinking at higher effort shares this budget with the answer
         if provider == "zai":
-            max_tokens = max(max_tokens, 16000)  # GLM reasons before answering and shares this budget with the answer
+            max_tokens = max(max_tokens, 32000)  # GLM reasons before answering and shares this budget with the answer
         messages = self._client(provider).messages
         if provider != "zai" and model in FALLBACK_MODELS:
             messages = self._client(provider).beta.messages
             kwargs.update(betas=[FALLBACK_BETA], fallbacks="default")
-        response = messages.create(
-            model=model, max_tokens=max_tokens, system=prompts.SYSTEM[role],
-            messages=[{"role": "user", "content": user}], **kwargs)
+        # Streamed, because large budgets exceed the SDK's limit for a single blocking request.
+        with messages.stream(model=model, max_tokens=max_tokens, system=prompts.SYSTEM[role],
+                             messages=[{"role": "user", "content": user}], **kwargs) as stream:
+            response = stream.get_final_message()
         if response.stop_reason == "refusal":
             raise ModelError(f"{model} declined the {role} request: {getattr(response, 'stop_details', None)}")
         text = "".join(block.text for block in response.content if getattr(block, "type", "") == "text")

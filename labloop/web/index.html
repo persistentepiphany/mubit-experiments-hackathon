@@ -88,6 +88,24 @@ h2{font-family:'Instrument Serif',serif;font-weight:400;font-size:22px;margin:0 
 .ev.err .m{color:var(--fail)}.ev.live .m{font-weight:500}
 .livebar{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:8px 10px;border-radius:10px;background:var(--runbg);margin-top:6px}
 .feed{max-height:420px;overflow-y:auto}
+.mol{position:relative;width:100%;height:300px;border-radius:12px;background:#faf7f2;overflow:hidden}
+.molbar{display:flex;gap:6px;flex-wrap:wrap}.molbar button{all:unset;cursor:pointer;font-size:11.5px;padding:4px 10px;border-radius:999px;background:var(--bg)}
+.molbar button.on{background:var(--ink);color:#fff}
+table.t{width:100%;border-collapse:collapse;font-size:12.5px}table.t td,table.t th{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+table.t th{font-weight:500;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em}
+details summary{cursor:pointer;font-size:12.5px;color:#4a443c}details p{font-size:12.5px;line-height:1.55;color:#4a443c;margin:8px 0 0}
+.tl{display:grid;grid-template-columns:14px 1fr;gap:10px}.tl .d{width:9px;height:9px;border-radius:50%;margin-top:5px}
+.btnlink{all:unset;cursor:pointer;font-size:12.5px;padding:5px 12px;border-radius:999px;border:1px solid var(--line2)}
+.btnlink:hover{background:#fff}
+.drawer{position:fixed;top:0;right:0;height:100vh;width:min(560px,100vw);background:var(--soft);border-left:1px solid var(--line2);box-shadow:-12px 0 40px rgba(42,38,34,.08);display:flex;flex-direction:column;z-index:20;transform:translateX(105%);transition:transform .22s ease,width .22s ease}
+.drawer.open{transform:none}.drawer.wide{width:min(1100px,100vw)}
+.drawer .dh{padding:18px 20px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.drawer .dt{font-family:'Instrument Serif',serif;font-size:21px;line-height:1.2;text-wrap:pretty}
+.drawer .db{flex:1;min-height:0;overflow:auto}
+.drawer iframe{width:100%;height:100%;border:0;background:#fff}
+.drawer .txt{padding:18px 22px;font-size:13.5px;line-height:1.65;color:#2a2622;white-space:pre-wrap}
+.drawer .txt h4{font-family:'Instrument Serif',serif;font-weight:400;font-size:18px;margin:18px 0 6px}
+.paperlink{cursor:pointer}.paperlink:hover .ot{text-decoration:underline}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:var(--soft);padding:12px;border-radius:10px;margin:0}
 @media (max-width:820px){
   .app{flex-direction:column}
@@ -106,11 +124,18 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:var(--
       <button class="navbtn" data-nav="home"><span class="dot" style="background:var(--olive)"></span>New task</button>
       <button class="navbtn" data-nav="runs"><span class="dot" style="background:var(--clay)"></span>Runs<span class="n" id="runCount"></span></button>
       <button class="navbtn" data-nav="skills"><span class="dot" style="background:var(--slate)"></span>Skills<span class="n" id="skillCount"></span></button>
+      <button class="navbtn" data-nav="projects"><span class="dot" style="background:#b8a3c9"></span>Projects<span class="n" id="projectCount"></span></button>
     </div>
     <div class="foot">Tools run on Modal.<br>Every run is graded against checks frozen before it starts.</div>
   </nav>
   <main id="view"></main>
 </div>
+<aside class="drawer" id="drawer" aria-label="Paper reader">
+  <div class="dh"><div style="display:flex;align-items:center;gap:8px"><span class="eyebrow" id="drawerKind">Paper</span>
+    <span style="margin-left:auto;display:flex;gap:6px"><button class="btnlink" id="drawerWide">Expand</button><button class="btnlink" id="drawerClose">Close</button></span></div>
+    <div class="dt" id="drawerTitle"></div><div class="small muted" id="drawerMeta"></div><div style="display:flex;gap:6px;flex-wrap:wrap" id="drawerLinks"></div></div>
+  <div class="db" id="drawerBody"></div>
+</aside>
 <script>
 const TEMPLATES = [
   {id:'fold', name:'Fold a protein', color:'var(--olive)', tools:'ESMFold', eta:'about 2 min',
@@ -135,7 +160,7 @@ const PHASES = [
   {key:'grade', name:'Grade the checks', agent:'grader'},
   {key:'learn', name:'Record lessons', agent:'reviewer'},
 ];
-const S = {selected:null, skills:[], runs:[], dismissed:{}, timer:null};
+const S = {selected:null, skills:[], runs:[], dismissed:{}, timer:null, viewers:{}, molStyle:{}};
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(path, opts){
@@ -171,7 +196,8 @@ function verdictPill(phase, verdict){
 }
 async function refreshCounts(){
   try { const [r, s] = await Promise.all([api('/runs?limit=200'), api('/skills')]); S.runs = r.runs; S.skills = s.skills;
-    $('#runCount').textContent = S.runs.length || ''; $('#skillCount').textContent = S.skills.length || ''; } catch(e) {}
+    $('#runCount').textContent = S.runs.length || ''; $('#skillCount').textContent = S.skills.length || '';
+    const projects = new Set(S.runs.map(r => r.project || 'General')); $('#projectCount').textContent = projects.size || ''; } catch(e) {}
 }
 function setNav(name){ document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('on', b.dataset.nav === name)); }
 document.querySelectorAll('.navbtn').forEach(b => b.onclick = () => go(b.dataset.nav === 'home' ? '#/' : `#/${b.dataset.nav}`));
@@ -187,7 +213,9 @@ function renderHome(){
       <textarea id="prompt" rows="3" placeholder="e.g. Fetch UniProt P69905 and predict its structure with ESMFold, reporting whether the fold is confident."></textarea>
       <div class="bar"><span class="lbl">Agents</span>
         ${['planner','researcher','extractor','reviewer'].map(a=>`<span class="chip">${a}</span>`).join('')}
-        <button class="primary" id="runPrompt" style="margin-left:auto">Run pipeline</button></div>
+        <input id="project" list="projectList" placeholder="Project (optional)" value="${esc(S.project||'')}" style="margin-left:auto;border:1px solid rgba(42,38,34,.1);border-radius:999px;padding:7px 12px;font-size:12.5px;background:var(--soft);width:170px">
+        <datalist id="projectList">${[...new Set(S.runs.map(r=>r.project||'General'))].map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
+        <button class="primary" id="runPrompt">Run pipeline</button></div>
       <div id="promptErr" class="small" style="color:var(--fail);margin-top:8px"></div>
     </div>
     <div><h2>Or start from a template</h2>
@@ -216,6 +244,8 @@ function renderHome(){
   };
 }
 async function submit(task, btn, errEl){
+  const project = ($('#project') && $('#project').value.trim()) || '';
+  S.project = project; if (project) task.project = project;
   $(btn).disabled = true;
   try { const r = await api('/tasks', {method:'POST', body:JSON.stringify(task)}); S.selected = null; go(`#/runs/${r.run_id}`); }
   catch(e){ $(errEl).textContent = e.message; $(btn).disabled = false; }
@@ -277,6 +307,126 @@ function renderSteps(d){
       </div></div>`;
   }).join('');
 }
+function checkBounds(c){
+  const target = c.value ?? c.reference, obs = c.observed;
+  const lo = c.reference != null ? c.reference - (c.tolerance||0) : target, hi = c.reference != null ? c.reference + (c.tolerance||0) : target;
+  const vals = [0, lo, hi, typeof obs === 'number' ? obs : target].filter(v => typeof v === 'number');
+  let min = Math.min(...vals), max = Math.max(...vals); if (max - min < 1e-9) max = min + 1;
+  const pad = (max - min) * .12; return {min: min < 0 ? min - pad : 0, max: max + pad, lo, hi, obs};
+}
+function metricChart(checks){
+  const W = 340, rowH = 46;
+  const col = {PASS:'#a3a07a', FAIL:'#b4654f', UNVERIFIABLE:'#c9c3b8', pending:'#c9c3b8'};
+  const rows = checks.map((c,i) => {
+    const b = checkBounds(c), x = v => 8 + (W - 16) * (v - b.min) / (b.max - b.min), y = i * rowH;
+    const status = c.status || 'pending', name = String(c.metric).split('.').pop();
+    const band = c.reference != null ? `<rect x="${x(b.lo)}" y="${y+18}" width="${Math.max(2, x(b.hi)-x(b.lo))}" height="14" fill="rgba(141,162,184,.35)" rx="3"/>` : '';
+    const bar = typeof b.obs === 'number' ? `<rect x="${x(Math.min(0,b.obs))}" y="${y+21}" width="${Math.max(2, Math.abs(x(b.obs)-x(0)))}" height="8" fill="${col[status]}" rx="4"/>` : '';
+    const mark = c.reference == null ? `<line x1="${x(b.lo)}" x2="${x(b.lo)}" y1="${y+15}" y2="${y+35}" stroke="#2a2622" stroke-width="1.5"/>` : '';
+    return `<text x="8" y="${y+12}" font-size="11.5" fill="#2a2622">${esc(name)} <tspan fill="#8a847a">${esc(c.op || '≈')} ${fmtNum(c.value ?? c.reference)}${c.tolerance!=null?' ± '+fmtNum(c.tolerance):''}</tspan></text>
+      <text x="${W-8}" y="${y+12}" font-size="11.5" text-anchor="end" fill="${col[status]}">${typeof b.obs==='number'?fmtNum(b.obs):'n/a'}</text>
+      <rect x="8" y="${y+23}" width="${W-16}" height="4" fill="#f1ebe1" rx="2"/>${band}${bar}${mark}`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${checks.length*rowH}" width="100%" role="img" aria-label="Checks against their thresholds">${rows}</svg>`;
+}
+function renderMetrics(d){
+  const R = d.results, checks = R && R.checks ? R.checks : (d.plan ? d.plan.checks : null);
+  if (!checks || !checks.length) return '';
+  const sources = (d.plan && d.plan.checks || []).filter(c => c.source).map(c => `${c.id}: ${c.source}`);
+  return `<div class="card" style="display:flex;flex-direction:column;gap:10px"><div class="cardhead"><span class="eyebrow">${R ? 'Checks' : 'Frozen checks'}</span><span class="small muted">${R ? esc(R.verdict) : 'pending'}</span></div>
+    ${metricChart(checks)}
+    <div class="small muted" style="line-height:1.5">Bar: observed value. Black tick: threshold. Blue band: published reference ± tolerance.</div>
+    ${sources.length ? `<div class="small muted" style="line-height:1.5">${sources.map(esc).join('<br>')}</div>` : ''}</div>`;
+}
+function renderInvocation(d){
+  const m = d.match; if (!m || m.decision !== 'reuse') return '';
+  const mapping = Object.entries(m.input_mapping || {}).map(([k,v]) => `${k} ← ${v.from_input ? 'input ' + v.from_input : JSON.stringify(v.value)}`);
+  return `<div class="learned" style="gap:8px"><div class="h" style="font-size:18px">Skill invoked</div>
+    <div class="box" style="cursor:pointer" data-open="${esc(m.skill)}"><span class="dot" style="background:var(--slate)"></span>${esc(m.skill)}<span class="small muted" style="margin-left:auto">v${esc(m.version)}</span></div>
+    <div class="small" style="color:#4a443c;line-height:1.5"><strong style="font-weight:500">How.</strong> ${esc(m.via || 'matched by the applicability role')}${m.model ? ' (' + esc(m.model) + ')' : ''}</div>
+    ${m.matched_applies_when ? `<div class="small" style="color:#4a443c;line-height:1.5"><strong style="font-weight:500">Condition matched.</strong> “${esc(m.matched_applies_when)}”</div>` : ''}
+    ${mapping.length ? `<div class="small" style="color:#4a443c;line-height:1.5"><strong style="font-weight:500">Inputs.</strong> ${mapping.map(esc).join(' · ')}</div>` : ''}
+    <div class="small muted" style="line-height:1.5">${esc(m.reason || '')}</div></div>`;
+}
+function renderStudies(d){
+  const r = d.research; if (!r) return '';
+  const ex = r.extraction || {}, nums = ex.reported_numbers || [], guide = ex.guidance || [], pq = (r.paperqa && r.paperqa.answers) || [];
+  if (!ex.summary && !nums.length && !pq.length) return '';
+  return `<div class="card" style="display:flex;flex-direction:column;gap:12px"><div class="cardhead"><span class="eyebrow">Study distillation</span><span class="small muted">${nums.length} sourced numbers</span></div>
+    ${ex.summary ? `<p style="margin:0;font-size:13.5px;line-height:1.55">${esc(ex.summary)}</p>` : ''}
+    ${nums.length ? `<table class="t"><tr><th>Quantity</th><th>Value</th><th>Source</th></tr>${nums.slice(0,8).map(n=>`<tr><td>${esc(n.quantity)}<div class="muted">${esc(String(n.context||'').slice(0,90))}</div></td><td>${esc(n.value)} ${esc(n.unit||'')}</td><td class="muted">${esc(String(n.source||'').slice(0,70))}</td></tr>`).join('')}</table>` : ''}
+    ${guide.slice(0,4).map(g=>`<div class="small" style="line-height:1.5">• ${esc(g.statement)} <span class="muted">(${esc(String(g.source||'').slice(0,60))})</span></div>`).join('')}
+    ${pq.map(a=>`<details><summary>${esc(a.question.slice(0,110))}…</summary><p>${esc(a.answer)}</p></details>`).join('')}</div>`;
+}
+function renderStructures(d){
+  const ex = (d.experiments||[]).filter(e => e.status==='ok' && e.result && e.result.artifacts && e.result.artifacts.structure);
+  if (!ex.length) return '';
+  return ex.map(e => { const key = `${d.run_id}:${e.step_id}`, style = S.molStyle[key] || 'confidence';
+    return `<div class="card" style="display:flex;flex-direction:column;gap:10px"><div class="cardhead"><span class="eyebrow">Structure · ${esc(e.step_id)}</span><span class="small muted">${esc(e.tool)}</span></div>
+    <div class="mol" data-mol="${esc(key)}" data-path="${esc(e.result.artifacts.structure)}"></div>
+    <div class="molbar" data-molbar="${esc(key)}">${['front','side','top','spin'].map(v=>`<button data-view="${v}">${v}</button>`).join('')}<span style="flex:1"></span>${['confidence','chain'].map(v=>`<button data-color="${v}" class="${style===v?'on':''}">${v}</button>`).join('')}</div>
+    <div class="small muted">Colored by per-residue confidence (blue high, red low) or by chain. Drag to rotate.</div></div>`; }).join('');
+}
+let molLib = null;
+function load3Dmol(){ if (!molLib) molLib = new Promise((ok, bad) => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/3dmol@2.5.5/build/3Dmol-min.js'; sc.onload = () => ok(window.$3Dmol); sc.onerror = bad; document.head.appendChild(sc); }); return molLib; }
+function styleMol(v, key){
+  const kind = S.molStyle[key] || 'confidence';
+  const atoms = v.getModel().selectedAtoms({}); const maxB = Math.max(...atoms.map(a => a.b || 0), 1);
+  const scale = maxB <= 1.01 ? 1 : 100;
+  v.setStyle({}, kind === 'chain' ? {cartoon:{colorscheme:'chain'}} : {cartoon:{colorfunc: a => { const p = (a.b||0)/scale; return p >= .9 ? '#2f5d8a' : p >= .7 ? '#8da2b8' : p >= .5 ? '#e0b05a' : '#c9705a'; }}});
+  v.render();
+}
+async function mountStructures(){
+  for (const el of document.querySelectorAll('[data-mol]')) {
+    const key = el.dataset.mol, cached = S.viewers[key];
+    if (cached) { el.replaceWith(cached.el); continue; }
+    try {
+      const $3D = await load3Dmol();
+      const text = await (await fetch(`/artifacts/${el.dataset.path}`)).text();
+      const v = $3D.createViewer(el, {backgroundColor:'#faf7f2'});
+      v.addModel(text, el.dataset.path.endsWith('.cif') ? 'cif' : 'pdb'); styleMol(v, key); v.zoomTo(); v.render();
+      S.viewers[key] = {el, v};
+    } catch(e) { el.innerHTML = `<div class="small muted" style="padding:16px">Structure could not be loaded: ${esc(e.message||e)}</div>`; }
+  }
+  document.querySelectorAll('[data-molbar]').forEach(bar => {
+    const key = bar.dataset.molbar;
+    bar.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { const c = S.viewers[key]; if (!c) return; const v = c.v;
+      v.spin(false);
+      if (b.dataset.view === 'front') { v.zoomTo(); }
+      if (b.dataset.view === 'side') { v.zoomTo(); v.rotate(90, 'y'); }
+      if (b.dataset.view === 'top') { v.zoomTo(); v.rotate(90, 'x'); }
+      if (b.dataset.view === 'spin') v.spin('y');
+      v.render(); });
+    bar.querySelectorAll('[data-color]').forEach(b => b.onclick = () => { S.molStyle[key] = b.dataset.color; const c = S.viewers[key]; if (c) styleMol(c.v, key);
+      bar.querySelectorAll('[data-color]').forEach(x => x.classList.toggle('on', x === b)); });
+  });
+}
+function paperAttrs(p, corpus){
+  const file = p.file && corpus ? `${corpus}/${p.file}` : '';
+  return `class="paperlink" data-paper="${esc(JSON.stringify({title:p.title, doi:p.doi, year:p.year, citations:p.citations, pmcid:p.pmcid, text_source:p.text_source, file}))}"`;
+}
+async function openPaper(p){
+  const d = $('#drawer'); d.classList.add('open');
+  $('#drawerKind').textContent = p.file ? (p.file.endsWith('.pdf') ? 'PDF' : p.text_source === 'abstract' ? 'Abstract' : 'Full text') : 'Paper';
+  $('#drawerTitle').textContent = p.title || 'Untitled';
+  $('#drawerMeta').textContent = [p.year, p.citations != null ? `${p.citations} citations` : null, p.text_source ? `text from ${p.text_source}` : null].filter(Boolean).join(' · ');
+  $('#drawerLinks').innerHTML = [p.doi ? `<a class="btnlink" target="_blank" rel="noopener" href="https://doi.org/${esc(p.doi)}">DOI</a>` : '',
+    p.pmcid ? `<a class="btnlink" target="_blank" rel="noopener" href="https://europepmc.org/article/PMC/${esc(p.pmcid)}">Europe PMC</a>` : '',
+    p.file ? `<a class="btnlink" target="_blank" rel="noopener" href="/artifacts/${esc(p.file)}">Open file</a>` : ''].join('');
+  const body = $('#drawerBody');
+  if (!p.file) { body.innerHTML = `<div class="txt muted">No local copy was frozen for this paper. Use the DOI link to read it at the publisher.</div>`; return; }
+  if (p.file.endsWith('.pdf')) { body.innerHTML = `<iframe src="/artifacts/${esc(p.file)}#view=FitH" title="${esc(p.title)}"></iframe>`; return; }
+  body.innerHTML = '<div class="txt muted">Loading…</div>';
+  try {
+    const r = await fetch(`/artifacts/${p.file}`); if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const text = await r.text();
+    body.innerHTML = `<div class="txt">${esc(text).replace(/^## (.*)$/gm, '<h4>$1</h4>')}</div>`;
+  } catch(e) { body.innerHTML = `<div class="txt muted">The frozen copy could not be loaded (${esc(e.message)}).</div>`; }
+}
+$('#drawerClose').onclick = () => $('#drawer').classList.remove('open','wide');
+$('#drawerWide').onclick = () => { const w = $('#drawer').classList.toggle('wide'); $('#drawerWide').textContent = w ? 'Narrow' : 'Expand'; };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#drawer').classList.remove('open','wide'); });
+document.addEventListener('click', e => { const el = e.target.closest('[data-paper]'); if (el) { e.preventDefault(); openPaper(JSON.parse(el.dataset.paper)); } });
 function renderActivity(d, phase){
   const running = phase !== 'done' && phase !== 'error', events = d.events || [];
   const open = running ? openEvents(events) : [];
@@ -290,17 +440,9 @@ function renderOutputs(d){
     const sc = (e.result && e.result.scores) || {}; const art = (e.result && e.result.artifacts) || {};
     const scoreText = Object.entries(sc).map(([k,v])=>`${k} ${fmtNum(v)}`).join(' · ');
     return `<div class="out"><div class="ot">${esc(e.step_id)} · ${esc(e.tool)}</div><div class="om">${esc(scoreText||'no scores')}</div>${art.structure?`<div class="om">${esc(art.structure)}</div>`:''}</div>`;
-  }).concat(papers.map(p => `<div class="out"><div class="ot">${esc(p.title)}</div><div class="om">${esc([p.year, p.doi ? 'doi '+p.doi : p.id].filter(Boolean).join(' · '))}</div></div>`));
+  }).concat(papers.map(p => `<div class="out" ${paperAttrs(p, d.research && d.research.corpus && d.research.corpus.path)}><div class="ot">${esc(p.title)}</div><div class="om">${esc([p.year, p.citations!=null?p.citations+' citations':null, p.text_source, p.doi ? 'doi '+p.doi : p.id].filter(Boolean).join(' · '))} · read</div></div>`));
   return `<div class="card" style="display:flex;flex-direction:column;gap:14px"><div class="cardhead"><span class="eyebrow">Outputs</span><span class="small muted">${papers.length} ${papers.length===1?'paper':'papers'}</span></div>
     ${items.length ? items.join('') : '<div class="small muted" style="line-height:1.5">Results appear here as agents finish each step.</div>'}</div>`;
-}
-function renderChecks(d){
-  const R = d.results; if (!R || !R.checks) {
-    if (!d.plan) return '';
-    return `<div class="card" style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">Frozen checks</span>${d.plan.checks.map(c=>`<div class="check"><span class="s" style="background:#ece8e1">pending</span><span>${esc(c.metric)} ${esc(c.op||'≈')} ${fmtNum(c.value ?? c.reference)}${c.tolerance!=null?' ± '+fmtNum(c.tolerance):''}</span></div>`).join('')}</div>`;
-  }
-  const col = {PASS:'var(--okbg)', FAIL:'var(--failbg)', UNVERIFIABLE:'#ece8e1'};
-  return `<div class="card" style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">Checks</span>${R.checks.map(c=>`<div class="check"><span class="s" style="background:${col[c.status]}">${esc(c.status.toLowerCase())}</span><span>${esc(c.metric)} ${esc(c.op||'≈')} ${fmtNum(c.value ?? c.reference)}${c.tolerance!=null?' ± '+fmtNum(c.tolerance):''}<span class="muted">, observed ${c.observed==null?'nothing':fmtNum(c.observed)}${c.reason?' · '+esc(c.reason):''}</span></span></div>`).join('')}</div>`;
 }
 function renderSummary(d){
   const st = d.status || {}; if (st.phase !== 'done') return '';
@@ -328,16 +470,19 @@ async function renderRun(id){
   const origin = st.origin ? (st.origin.kind === 'skill' ? `Skill · ${st.origin.skill} v${st.origin.version}` : 'New pipeline') : (d.match && d.match.decision === 'reuse' ? `Skill · ${d.match.skill}` : 'Task');
   $('#view').innerHTML = `<div style="display:flex;flex-direction:column;gap:32px">
     <div><button class="back" onclick="go('#/')">← New task</button>
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap"><span class="eyebrow">${esc(origin)}</span>${verdictPill(phase, st.verdict)}<span class="small muted">${esc(id)}</span></div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap"><span class="eyebrow">${esc(origin)}</span>${verdictPill(phase, st.verdict)}<span class="small muted">${esc(id)}</span>${d.task && d.task.project ? `<span class="chip">${esc(d.task.project)}</span>` : ''}
+        ${st.report ? `<a class="btnlink" href="/runs/${esc(id)}/report" target="_blank" rel="noopener" style="margin-left:auto">Open report</a>` : ''}
+        ${st.report && st.report.supabase ? `<a class="btnlink" href="${esc(st.report.supabase)}" target="_blank" rel="noopener">Supabase copy</a>` : ''}</div>
       <h1 class="run">${esc((d.task && d.task.description) || 'Queued task')}</h1>
       ${d.task && Object.keys(d.task.inputs||{}).length ? `<div class="kv" style="margin-top:8px">${Object.entries(d.task.inputs).map(([k,v])=>`<span style="margin-right:14px">${esc(k)} <span style="color:var(--ink)">${esc(String(typeof v==='string'?v:JSON.stringify(v)).slice(0,80))}</span></span>`).join('')}</div>` : ''}
     </div>
     ${phase === 'error' ? `<div class="err"><strong>The run stopped.</strong> ${esc(st.error)}</div>` : ''}
     <div class="cols"><div>${renderSteps(d)}</div>
-      <div class="side">${renderActivity(d, phase)}${renderOutputs(d)}${renderChecks(d)}${renderSummary(d)}${renderLearned(d)}</div></div>
+      <div class="side">${renderInvocation(d)}${renderActivity(d, phase)}${renderStructures(d)}${renderMetrics(d)}${renderSummary(d)}${renderLearned(d)}${renderStudies(d)}${renderOutputs(d)}</div></div>
   </div>`;
   document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => go(`#/skills/${b.dataset.open}`));
   document.querySelectorAll('[data-dismiss]').forEach(b => b.onclick = () => { S.dismissed[id] = true; renderRun(id); });
+  mountStructures();
   clearTimeout(S.timer);
   if (phase !== 'done' && phase !== 'error') S.timer = setTimeout(() => renderRun(id), 2500);
   else refreshCounts();
@@ -349,7 +494,7 @@ async function renderRuns(){
   $('#view').innerHTML = `<div class="stack" style="gap:24px"><div><h1>Runs</h1><p class="sub">Every task, with its frozen plan and graded verdict.</p></div>
     <div class="list">${S.runs.length ? S.runs.map(r=>`<div class="row" data-run="${esc(r.run_id)}">
       <div style="flex:1;min-width:0"><div style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.description)}</div>
-      <div class="small muted">${esc(r.origin && r.origin.kind==='skill' ? 'skill '+r.origin.skill : 'new pipeline')} · ${esc(ago(r.started_at))}</div>
+      <div class="small muted">${esc(r.project || 'General')} · ${esc(r.origin && r.origin.kind==='skill' ? 'skill '+r.origin.skill : 'new pipeline')} · ${esc(ago(r.started_at))}</div>
       ${r.activity ? `<div class="small" style="margin-top:4px;color:#4a443c">${esc(r.activity.message)}${(r.in_flight||[]).length?` <span class="muted" data-since="${esc(r.in_flight[0].at)}">${since(r.in_flight[0].at)}</span>`:''}</div>` : ''}</div>
       ${verdictPill(r.phase, r.verdict)}</div>`).join('') : '<div class="muted small">No runs yet.</div>'}</div></div>`;
   document.querySelectorAll('[data-run]').forEach(e => e.onclick = () => go(`#/runs/${e.dataset.run}`));
@@ -381,9 +526,46 @@ async function renderSkills(){
       <div style="display:flex;align-items:center;gap:8px"><span class="dot" style="background:${t.deployed?'var(--olive)':'var(--muted)'}"></span><span style="font-size:14.5px;font-weight:500">${esc(t.title)}</span><span class="small muted" style="margin-left:auto">${t.deployed?'deployed':'not deployed'} · v${t.version}</span></div>
       <div class="kv">${esc(t.summary||'')}</div>
       ${t.guidance.slice(0,3).map(g=>`<div class="small" style="line-height:1.5">• ${esc(g.statement)} <span class="muted">(${esc(String(g.source||'').slice(0,60))})</span></div>`).join('')}
+      ${t.papers.map(x=>`<div class="small" style="line-height:1.45" ${paperAttrs(x, t.corpus)}>• <span style="text-decoration:underline">${esc(x.title)}</span> <span class="muted">${esc(x.year||'')}</span></div>`).join('')}
       <div class="small muted" style="margin-top:auto">${t.papers.length} papers · ${t.guidance.length} guidance · ${t.reported_numbers.length} numbers${t.papers_missing.length?` · ${t.papers_missing.length} not found`:''}</div>
     </div>`).join('') : '<div class="muted small">No tool knowledge yet.</div>';
   } catch(e) { $('#knowledge').innerHTML = `<div class="small" style="color:var(--fail)">${esc(e.message)}</div>`; }
+}
+function sparkline(values, color){
+  const v = values.filter(x => typeof x === 'number'); if (v.length < 2) return '';
+  const W = 160, H = 34, min = Math.min(...v), max = Math.max(...v), r = (max - min) || 1;
+  const pts = v.map((x,i) => `${4 + i*(W-8)/(v.length-1)},${H-4-(x-min)*(H-8)/r}`).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/>${v.map((x,i)=>`<circle cx="${4 + i*(W-8)/(v.length-1)}" cy="${H-4-(x-min)*(H-8)/r}" r="2.5" fill="${color}"/>`).join('')}</svg>`;
+}
+function renderInvocations(s, consultations){
+  const metric = (s.pipeline.checks[0] || {}).metric;
+  const series = s.evidence.map(e => (e.metrics || {})[metric]);
+  const invoked = consultations.filter(c => c.outcome === 'invoked').length, declined = consultations.filter(c => c.outcome === 'declined').length;
+  const passKeys = new Set(s.evidence.filter(e => e.verdict === 'PASS').map(e => e.inputs_digest));
+  const items = s.evidence.map((e,i) => {
+    const inv = e.invocation;
+    return `<div class="tl"><span class="d" style="background:${e.verdict==='PASS'?'var(--olive)':e.verdict==='FAIL'?'var(--fail)':'#c9c3b8'}"></span><div>
+      <div class="small" style="cursor:pointer" data-run="${esc(e.run_id)}"><strong style="font-weight:500">${i===0?'Extracted':'Invoked'}</strong> · ${esc(e.verdict)} · <span class="muted">${esc(e.run_id)}</span></div>
+      <div class="small muted" style="line-height:1.5">${esc(e.task)}</div>
+      ${inv ? `<div class="small" style="line-height:1.5;color:#4a443c">${esc(inv.via||'')}${inv.matched_applies_when?` · matched “${esc(inv.matched_applies_when)}”`:''}${inv.input_mapping?` · ${Object.entries(inv.input_mapping).map(([k,v])=>`${esc(k)} ← ${esc(v.from_input||JSON.stringify(v.value))}`).join(', ')}`:''}</div>` : ''}
+      ${metric && typeof (e.metrics||{})[metric] === 'number' ? `<div class="small muted">${esc(metric.split('.').pop())} ${fmtNum(e.metrics[metric])}</div>` : ''}
+    </div></div>`; }).join('');
+  const declinedList = consultations.filter(c => c.outcome === 'declined').slice(-4).reverse();
+  return `<div class="card" style="display:flex;flex-direction:column;gap:12px"><div class="cardhead"><span class="eyebrow">Invocations</span><span class="small muted">invoked ${invoked} · declined ${declined}</span></div>
+    <div style="display:flex;align-items:center;gap:12px"><div class="small muted" style="flex:1;line-height:1.5">Standing needs passes on different inputs: ${passKeys.size} distinct passing ${passKeys.size===1?'input':'inputs'} so far.${metric?` Trend of ${esc(metric.split('.').pop())}:`:''}</div>${sparkline(series, '#8da2b8')}</div>
+    ${items}
+    ${declinedList.length ? `<div class="eyebrow" style="margin-top:6px">Recently considered and declined</div>${declinedList.map(c=>`<div class="small muted" style="line-height:1.5;cursor:pointer" data-run="${esc(c.run_id)}">• ${esc(String(c.task||'').slice(0,90))}: ${esc(String(c.reason||'').slice(0,160))}</div>`).join('')}` : ''}</div>`;
+}
+function renderProvenance(s){
+  const p = s.provenance || {};
+  const papers = p.papers || [];
+  return `<div class="card" style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">How this skill was extracted</span>
+    <div class="small" style="line-height:1.55">Frozen from run <a href="#/runs/${esc(s.created_by_run)}">${esc(s.created_by_run)}</a> after it passed every check, with plan digest <span class="muted">${esc(String(s.plan_digest||'').slice(0,12))}</span>.</div>
+    ${p.run_id ? `<div class="small" style="line-height:1.55">${papers.length} papers read, ${(p.papers_cited||[]).length} cited by PaperQA2, ${p.sourced_numbers||0} sourced numbers extracted. ${(p.reference_checks||[]).length} checks match a published reference and ${(p.threshold_checks||[]).length} use thresholds; ${p.source_silent_decisions||0} of ${p.decisions||0} decisions were not settled by the literature.${(p.tool_knowledge||[]).length?` Tool knowledge used: ${p.tool_knowledge.map(esc).join(', ')}.`:''}</div>
+      ${papers.slice(0,5).map(x=>`<div class="small muted" style="line-height:1.45" ${paperAttrs(x, null)}>• <span style="text-decoration:underline">${esc(x.title)}</span> (${esc(x.year||'')}${x.citations!=null?`, ${x.citations} citations`:''})</div>`).join('')}`
+      : `<div class="small muted" style="line-height:1.55">This skill predates provenance tracking, so only its source run and plan digest are recorded.</div>`}
+    ${(s.sources||[]).length ? `<div class="eyebrow" style="margin-top:6px">Sources cited by the plan</div>${s.sources.slice(0,5).map(x=>`<div class="small muted" style="line-height:1.45">• ${esc(x.title||x.id)}${x.used_for?` · ${esc(x.used_for)}`:''}</div>`).join('')}` : ''}
+    <div class="small muted" style="line-height:1.5;margin-top:4px">Mubit mirror: the skill's description is sent to Mubit when its memory API is reachable with this key; otherwise it is kept on the state volume, which the planner and matcher read.</div></div>`;
 }
 async function renderSkill(name){
   setNav('skills');
@@ -399,8 +581,8 @@ async function renderSkill(name){
       <div class="card" style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">Pipeline</span>
         ${s.pipeline.steps.map(st=>`<div class="small"><strong style="font-weight:500">${esc(st.id)}</strong> · ${esc(st.tool)} <span class="muted">${esc(JSON.stringify(st.args))}</span></div>`).join('')}
         <span class="eyebrow" style="margin-top:8px">Checks</span>${s.pipeline.checks.map(ch=>`<div class="small">${esc(ch.metric)} ${esc(ch.op||'≈')} ${fmtNum(ch.value ?? ch.reference)}${ch.tolerance!=null?' ± '+fmtNum(ch.tolerance):''}</div>`).join('')}</div>
-      <div class="card" style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">Evidence</span>
-        ${s.evidence.map(e=>`<div class="row" data-run="${esc(e.run_id)}" style="padding:10px 12px">${verdictPill('done', e.verdict)}<span class="small" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.task)}</span><span class="small muted">${esc(e.inputs_digest.slice(0,8))}</span></div>`).join('')}</div>
+      ${renderInvocations(s, d.consultations || [])}
+      ${renderProvenance(s)}
     </div>
     <div class="side">
       <div class="card" style="display:flex;flex-direction:column;gap:14px"><span class="eyebrow">Run this skill</span>
@@ -439,6 +621,22 @@ async function renderJob(){
   if (running) S.jobTimer = setTimeout(renderJob, 3000);
 }
 
+async function renderProjects(){
+  setNav('projects');
+  let d; try { d = await api('/projects'); } catch(e) { $('#view').innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  $('#view').innerHTML = `<div class="stack" style="gap:24px"><div><h1>Projects</h1><p class="sub">Runs grouped by project, with what each project has learned.</p></div>
+    <div class="grid">${d.projects.map(p => { const total = Math.max(1, p.runs);
+      const seg = [['PASS','var(--olive)'],['FAIL','var(--fail)'],['INCONCLUSIVE','#c9c3b8'],['errors','#e3c2b8'],['running','var(--clay)']];
+      return `<div class="skillcard"><div style="display:flex;align-items:baseline;gap:8px"><span style="font-family:'Instrument Serif',serif;font-size:21px">${esc(p.name)}</span><span class="small muted" style="margin-left:auto">${p.runs} runs · ${esc(ago(p.latest))}</span></div>
+        <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--bg)">${seg.map(([k,c])=>p[k]?`<span title="${k} ${p[k]}" style="width:${100*p[k]/total}%;background:${c}"></span>`:'').join('')}</div>
+        <div class="small muted">${p.PASS} passed · ${p.FAIL} failed · ${p.INCONCLUSIVE} inconclusive${p.errors?` · ${p.errors} errors`:''}${p.running?` · ${p.running} running`:''}</div>
+        ${p.skills_created.length ? `<div class="pills">${p.skills_created.map(k=>`<span class="chip" style="cursor:pointer;background:var(--slatebg)" data-skill="${esc(k)}">${esc(k)}</span>`).join('')}</div>` : ''}
+        ${p.skills_used.length ? `<div class="small muted">Reused ${p.skills_used.map(esc).join(', ')}</div>` : ''}
+        <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">${p.recent.map(r=>`<div class="small" style="display:flex;gap:8px;align-items:center;cursor:pointer" data-run="${esc(r.run_id)}"><span class="dot" style="background:${r.verdict==='PASS'?'var(--olive)':r.verdict==='FAIL'?'var(--fail)':r.phase==='done'?'#c9c3b8':'var(--clay)'}"></span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.description)}</span></div>`).join('')}</div></div>`; }).join('') || '<div class="muted small">No projects yet.</div>'}</div></div>`;
+  document.querySelectorAll('[data-run]').forEach(e => e.onclick = () => go(`#/runs/${e.dataset.run}`));
+  document.querySelectorAll('[data-skill]').forEach(e => e.onclick = () => go(`#/skills/${e.dataset.skill}`));
+}
+
 /* ---------------------------------------------------------------- router */
 async function route(){
   clearTimeout(S.timer);
@@ -448,6 +646,7 @@ async function route(){
   if (h === '/runs') return renderRuns();
   if ((m = h.match(/^\/skills\/([a-z0-9_]+)$/))) return renderSkill(m[1]);
   if (h === '/skills') return renderSkills();
+  if (h === '/projects') return renderProjects();
   await refreshCounts(); renderHome();
 }
 window.addEventListener('hashchange', route);
