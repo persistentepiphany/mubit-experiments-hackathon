@@ -47,7 +47,11 @@ def _diff(before: dict[str, Any] | None, after: dict[str, Any] | None) -> dict[s
 
 def _runs(state: StateRoot) -> list[dict[str, Any]]:
     out = []
-    for path in sorted(state.runs.glob("r-*")) if state.runs.exists() else []:
+    # Run ids have one-second resolution, so order by when each run directory's task file was written.
+    paths = sorted(state.runs.glob("r-*"), key=lambda p: ((p / "task.json").stat().st_mtime_ns
+                                                          if (p / "task.json").exists() else 0, p.name)) \
+        if state.runs.exists() else []
+    for path in paths:
         run = RunDir(path)
         status = run.read_json("run.json", {}) or {}
         out.append({"run_id": path.name, "task": run.read_json("task.json", {}) or {}, "status": status,
