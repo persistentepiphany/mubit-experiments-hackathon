@@ -10,10 +10,15 @@ Live at **https://persistentepiphany--labloop-backend-api.us-east.modal.run** (A
 
 | Criterion | What answers it | Where to see it | Status |
 | --- | --- | --- | --- |
-| Recurring tasks, corrections becoming model updates | Six fixed-prompt roles, each recorded as one Mubit task. The corrector role and `POST /runs/{id}/corrections` turn a correction into a rule; "Re-run with this correction" plans again under it. | Run page, Learning page, Mubit Requests | Built; awaits live corrections |
+| Recurring tasks, corrections becoming model updates | Six fixed-prompt roles, each recorded as one Mubit task. The corrector role and `POST /runs/{id}/corrections` turn a correction into a rule; "Re-run with this correction" plans again under it. | Run page, Learning page, Mubit Requests | Live: a correction to a failed ESMFold run became a planner rule and its re-run was started |
 | Own your intelligence layer | `labloop-routing` moves any role between a closed model (Opus 5 or Haiku 5.5 through Mubit) and an open one (GLM 5.3 through Z.AI). Each call is logged to the run's `CALLS.jsonl` with provider, model, latency, tokens, cost, `recorded_by_mubit` and `prompt_digest`. | Learning page, closed against open per role | Open side has data; closed side refills after the Anthropic limit resets |
 | Fast refresh | Refresh jobs rebuild versioned tool cards from new papers. Skill versions and lessons grow with every run, and every recorded call is a new example for the next adapter version. | Skills page, Learning refresh panel, `GET /jobs` | Cards and skills verified; adapter retraining awaits new examples |
 | Use of Mubit | Every role call is recorded through the Mubit gateway. A correction yields a recorded corrector call and a recorded corrected planner call, which train the next adapter of each task. | [How Mubit is used](#how-mubit-is-used) | Gateway verified; memory API refused for this key |
+
+<table><tr>
+<td width="50%"><img src="docs/screenshots/learning.png" alt="Learning page with the correction chain, failures fixed by the system, roles on Mubit, closed and open models, and refresh charts"><br><sub>Learning page from live state.</sub></td>
+<td width="50%"><img src="docs/screenshots/run-correction.png" alt="A failed run with the correction a person wrote and the planner rule it became"><br><sub>A correction on a failed run and the rule it became.</sub></td>
+</tr></table>
 
 ## How Mubit is used
 
@@ -121,7 +126,7 @@ The run and grade phases recheck the frozen plan's digest and refuse a changed p
 
 ## Frontend
 
-Folio (`labloop/web/index.html`) is one static page served at `/`. It follows runs live and shows checks against observed values, 3D structures, studies and papers read, and skills with their evidence. The Learning page (`#/learning`) and the "Correct this run" card are new; screenshots of them will follow.
+Folio (`labloop/web/index.html`) is one static page served at `/`. It follows runs live and shows checks against observed values, 3D structures, studies and papers read, and skills with their evidence. The Learning page (`#/learning`) and the "Correct this run" card are shown under [The brief](#the-brief-and-where-it-shows).
 
 <table>
   <tr>
