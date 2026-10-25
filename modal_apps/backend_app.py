@@ -86,8 +86,11 @@ def ingest_knowledge(tools: list[str] | None = None, job_id: str | None = None) 
     emit("info", f"Knowledge refresh started for {len(tools)} tools: {', '.join(tools)}")
     mem = memory.from_env(state.memory)
     try:
+        models = AnthropicModels()
         reports = ingest(tools, store=KnowledgeStore(state.knowledge), dispatcher=ModalDispatcher(),
-                         models=AnthropicModels(), memory=mem, run_id=job_id, emit=emit)
+                         models=models, memory=mem, run_id=job_id, emit=emit)
+        for call in models.ledger.drain():
+            job.append("CALLS.jsonl", call)
         errors = list(getattr(mem, "errors", []))
         if errors:
             emit("info", f"Mubit memory and skill writes were refused ({len(errors)} times); cards and lessons are "
@@ -110,6 +113,22 @@ def ingest(tools: str = "") -> None:
     import json
 
     print(json.dumps(ingest_knowledge.remote([t for t in tools.split(",") if t] or None), indent=1))
+
+
+@app.function(image=image, volumes={STATE: state_volume, ARTIFACTS: artifacts_volume}, secrets=[keys, routing],
+              timeout=10 * 60)
+def correct_run(run_id: str, text: str, by: str = "a person") -> dict:
+    """Record a person's correction of a run as a rule the next plan follows."""
+    from labloop import memory
+    from labloop.dispatch import ModalDispatcher
+    from labloop.models import AnthropicModels
+    from labloop.orchestrator import Loop
+    from labloop.state import StateRoot
+
+    state_volume.reload()
+    state = StateRoot(STATE, commit=state_volume.commit, reload=state_volume.reload)
+    loop = Loop(state, models=AnthropicModels(), dispatcher=ModalDispatcher(), memory=memory.from_env(state.memory))
+    return loop.correct(run_id, text, by)
 
 
 @app.function(image=image, volumes={STATE: state_volume, ARTIFACTS: artifacts_volume}, timeout=60 * 60)
@@ -168,7 +187,8 @@ def retire(name: str, by: str, reason: str) -> None:
     print(retire_skill.remote(name, by, reason))
 
 
-@app.function(image=image, volumes={STATE: state_volume, ARTIFACTS: artifacts_volume}, scaledown_window=300)
+@app.function(image=image, volumes={STATE: state_volume, ARTIFACTS: artifacts_volume}, secrets=[routing],
+              scaledown_window=300)
 @modal.asgi_app()
 def api():
     from labloop.api import create_app
@@ -199,5 +219,8 @@ def api():
         ingest_knowledge.spawn(tools, job_id)
         return job_id
 
+    def record_correction(run_id: str, text: str, by: str) -> str:
+        return correct_run.spawn(run_id, text, by).object_id
+
     return create_app(state, submit, call_state, refresh_knowledge, artifacts_root=ARTIFACTS,
-                      artifacts_reload=artifacts_volume.reload)
+                      artifacts_reload=artifacts_volume.reload, record_correction=record_correction)

@@ -33,8 +33,15 @@ ARTIFACT_TYPES = {".pdb": "chemical/x-pdb", ".cif": "chemical/x-cif", ".json": "
 class TaskIn(BaseModel):
     description: str = Field(min_length=3, max_length=4000)
     project: str | None = Field(default=None, max_length=80)
+    replan: bool | None = None
+    corrects: str | None = Field(default=None, max_length=40)
     inputs: dict[str, Any] = Field(default_factory=dict)
     research_queries: list[str] | None = None
+
+
+class CorrectionIn(BaseModel):
+    text: str = Field(min_length=5, max_length=2000)
+    by: str | None = Field(default=None, max_length=80)
 
 
 class SkillRunIn(BaseModel):
@@ -45,7 +52,8 @@ class SkillRunIn(BaseModel):
 
 def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str | None],
                refresh_knowledge: Callable[[list[str] | None], str] | None = None,
-               artifacts_root: Path | None = None, artifacts_reload: Callable[[], None] | None = None) -> FastAPI:
+               artifacts_root: Path | None = None, artifacts_reload: Callable[[], None] | None = None,
+               record_correction: Callable[[str, str, str], str] | None = None) -> FastAPI:
     """`call_state(run_id)` is None for an unknown run, "queued" for a submitted run that has not
     written state yet, and an error message for a submitted run whose orchestrator call failed."""
     app = FastAPI(title="labloop", version="0.1.0")
@@ -94,6 +102,30 @@ def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str
                 return {"run_id": run_id, "phase": "queued"}
             return {"run_id": run_id, "phase": "error", "status": {"phase": "error", "error": call}}
         return run_bundle(path)
+
+    @app.post("/runs/{run_id}/corrections", status_code=202)
+    def correct(run_id: str, body: CorrectionIn) -> dict[str, Any]:
+        state.reload()
+        if not RUN_ID.match(run_id) or not state.run_dir(run_id).exists():
+            raise HTTPException(404, "unknown run")
+        if record_correction is None:
+            raise HTTPException(501, "corrections are not configured here")
+        return {"call": record_correction(run_id, body.text, body.by or "a person"), "phase": "queued"}
+
+    @app.get("/learning")
+    def get_learning() -> dict[str, Any]:
+        state.reload()
+        from labloop.learning import learning
+        from labloop.models import ROLE_DEFAULTS, ModelError, role_target
+
+        routing = {}
+        for role in ROLE_DEFAULTS:
+            try:
+                provider, model, effort = role_target(role)
+                routing[role] = f"{provider}:{model}" + (f"@{effort}" if effort else "")
+            except ModelError as error:
+                routing[role] = str(error)
+        return learning(state, routing)
 
     @app.get("/runs/{run_id}/report", response_class=HTMLResponse)
     def get_report(run_id: str):

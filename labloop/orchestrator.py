@@ -110,7 +110,12 @@ class Loop:
 
         candidates = {s["name"]: s for s in self.skills.list(include_retired=False)}
         record: dict[str, Any] = {"candidates": sorted(candidates), "lessons": [l.get("id") for l in lessons]}
-        if not candidates:
+        if task.get("replan"):
+            decision = {"decision": "plan", "skill": None,
+                        "reason": f"a person's correction of run {task.get('corrects') or 'an earlier run'} asked "
+                                  "for a fresh plan, so no saved skill is reused"}
+            candidates = {}
+        elif not candidates:
             decision = {"decision": "plan", "skill": None, "reason": "no saved skill is available"}
         else:
             user = json.dumps({
@@ -189,7 +194,8 @@ class Loop:
                                     for a in ((findings.get("paperqa") or {}).get("answers") or [])],
                 "extraction": findings.get("extraction"),
             },
-            "advisory_lessons": [l["content"] for l in lessons],
+            "corrections_from_people": [l["content"] for l in lessons if l.get("lesson_type") == "correction"],
+            "advisory_lessons": [l["content"] for l in lessons if l.get("lesson_type") != "correction"],
         }, indent=1)
         try:
             plan, replies = ask_json(self.models, "planner", user, run_id=run_id, max_tokens=8192,
@@ -472,5 +478,57 @@ class Loop:
             record = run.status("error", error=f"{type(error).__name__}: {error}",
                                 traceback=traceback.format_exc()[-4000:])
             emit("error", f"Run stopped: {type(error).__name__}: {str(error)[:300]}")
+        self._write_calls(run, run_id)
+        self.state.commit()
+        return record
+
+    def _write_calls(self, run: RunDir, run_id: str) -> None:
+        ledger = getattr(self.models, "ledger", None)
+        for call in (ledger.drain(run_id) if ledger else []):
+            run.append("CALLS.jsonl", call)
+
+    # ------------------------------------------------------------- correction
+    def correct(self, run_id: str, text: str, by: str = "a person") -> dict[str, Any]:
+        """Turn a person's correction of a finished run into a rule the next plan follows."""
+        from labloop.bundle import run_bundle
+
+        path = self.state.run_dir(run_id)
+        if not path.exists():
+            raise ValueError(f"unknown run {run_id}")
+        run = RunDir(path)
+        emit = Events(path / "EVENTS.jsonl", self.state.commit).emit
+        bundle = run_bundle(path)
+        plan = bundle.get("plan") or {}
+        user = json.dumps({
+            "task": (bundle.get("task") or {}).get("description"),
+            "pipeline": {"steps": plan.get("steps"), "checks": plan.get("checks")},
+            "outcome": {"verdict": (bundle.get("status") or {}).get("verdict"),
+                        "checks": (bundle.get("results") or {}).get("checks"),
+                        "summary": (bundle.get("status") or {}).get("summary")},
+            "correction": text,
+        }, indent=1, default=str)
+        emit("start", f"Correction from {by}: {text[:200]}", phase="learn", key="correction")
+        try:
+            answer, replies = ask_json(self.models, "corrector", user, run_id=run_id, max_tokens=2048,
+                                       check=lambda a: [] if isinstance(a, dict) and isinstance(a.get("rule"), str)
+                                       and a.get("rule").strip() else ["rule must be a non-empty string"])
+        except ModelError as error:
+            emit("error", f"The correction could not be turned into a rule: {str(error)[:200]}", phase="learn",
+                 key="correction")
+            self._write_calls(run, run_id)
+            raise
+        role = answer.get("role") if answer.get("role") in ("planner", "extractor", "applicability", "reviewer") \
+            else "planner"
+        before = len(getattr(self.memory, "errors", []))
+        lesson_id = self.memory.remember(answer["rule"], lesson_type="correction", run_id=run_id,
+                                         metadata={"role": role, "correction": text, "by": by})
+        record = {"text": text, "by": by, "rule": answer["rule"], "role": role,
+                  "replan": bool(answer.get("replan", True)), "summary": answer.get("summary"),
+                  "lesson_id": lesson_id, "model": f"{replies[-1].provider}:{replies[-1].model}",
+                  "recorded_by_mubit": replies[-1].provider == "mubit",
+                  "memory": self._mirror_status(before)}
+        run.append("CORRECTIONS.jsonl", record)
+        emit("done", f"Correction stored as a {role} rule: {answer['rule'][:200]}", phase="learn", key="correction")
+        self._write_calls(run, run_id)
         self.state.commit()
         return record

@@ -180,3 +180,36 @@ def test_forced_skill_run_and_retirement(tmp_path):
     retired = loop.skills.retire("esmfold_monomer_confidence", by="a reviewer", reason="superseded")
     assert standing(retired) == "retired"
     assert loop.skills.list(include_retired=False) == []
+
+
+def test_a_correction_becomes_a_rule_that_changes_the_next_plan(tmp_path):
+    from labloop.learning import learning
+
+    corrected = esmfold_plan(threshold=60)
+    corrected["decisions"].append({"topic": "threshold", "choice": "60",
+                                   "reason": "correction: short peptides need a lower pLDDT threshold",
+                                   "source_silent": False})
+    loop, models, _ = make_loop(tmp_path, {
+        "extractor": lambda u: EXTRACTION, "reviewer": lambda u: REVIEW,
+        "planner": [esmfold_plan(threshold=95), corrected],
+        "corrector": [{"rule": "For short peptides use a mean pLDDT threshold of 60 with ESMFold.",
+                       "role": "planner", "replan": True, "summary": "lower the threshold"}]})
+    task = {"description": "Fold this short peptide", "inputs": {"sequence": "MKTAYIAKQRQ"}}
+    failed = loop.run_task(task)
+    assert failed["verdict"] == "FAIL"
+    record = loop.correct(failed["run_id"], "The 95 threshold is too strict for a short peptide; use 60.")
+    assert record["role"] == "planner" and "60" in record["rule"]
+    fixed = loop.run_task({**task, "replan": True, "corrects": failed["run_id"]})
+    assert fixed["verdict"] == "PASS"
+    planner_input = json.loads([c for c in models.calls if c["role"] == "planner"][-1]["user"])
+    assert planner_input["corrections_from_people"] == [record["rule"]]
+    run = loop.state.run_dir(fixed["run_id"])
+    assert json.loads((run / "match.json").read_text())["decision"] == "plan"
+    assert (run / "CALLS.jsonl").exists()
+    view = learning(loop.state, {"planner": "scripted"})
+    c = view["corrections"][0]
+    assert c["followups"][0]["run_id"] == fixed["run_id"] and c["followups"][0]["verdict"] == "PASS"
+    assert c["followups"][0]["diff"]["checks_changed"][0]["after"]["value"] == 60
+    assert view["fixups"][0]["before"]["run_id"] == failed["run_id"]
+    planner = next(r for r in view["roles"] if r["role"] == "planner")
+    assert planner["calls"] == 2 and planner["by_model"][0]["model"] == "scripted"

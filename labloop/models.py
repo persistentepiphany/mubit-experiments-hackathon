@@ -10,9 +10,11 @@ task-specific text and each role keeps one model unless it is overridden.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import time
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
@@ -30,7 +32,54 @@ ROLE_DEFAULTS = {
     "extractor": "mubit:claude-haiku-5-5",
     "applicability": "mubit:claude-haiku-5-5",
     "reviewer": "mubit:claude-opus-5@high",
+    "corrector": "mubit:claude-haiku-5-5",
 }
+
+# List prices in USD per million input and output tokens, for the cost column of the call ledger.
+# A model missing here has its cost left blank rather than guessed; LABLOOP_PRICE_<MODEL> ("in,out")
+# adds one, with the model id upper-cased and its dots and dashes written as underscores.
+PRICES = {"claude-opus-5": (5.0, 25.0), "claude-opus-5-5": (4.0, 20.0), "claude-sonnet-5-5": (2.0, 10.0),
+          "claude-haiku-5-5": (0.10, 0.50)}
+
+
+def price(model: str) -> tuple[float, float] | None:
+    override = os.environ.get("LABLOOP_PRICE_" + re.sub(r"[^A-Za-z0-9]", "_", model).upper())
+    if override:
+        try:
+            a, b = (float(x) for x in override.split(","))
+            return a, b
+        except ValueError:
+            return None
+    return PRICES.get(model)
+
+
+def prompt_digest(role: str) -> str:
+    """Identifies a role's fixed instructions; the gateway groups calls into one task by them."""
+    return hashlib.sha256(prompts.SYSTEM[role].encode()).hexdigest()[:12]
+
+
+class Ledger:
+    """Every model call a client makes, kept until drained into a run's CALLS.jsonl."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def record(self, role: str, run_id: str, provider: str, model: str, started: float, *, ok: bool,
+               input_tokens: int = 0, output_tokens: int = 0, error: str | None = None,
+               stop_reason: str | None = None) -> None:
+        rates = price(model)
+        cost = (input_tokens * rates[0] + output_tokens * rates[1]) / 1e6 if rates else None
+        self.calls.append({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "role": role,
+                           "run_id": run_id, "provider": provider, "model": model,
+                           "recorded_by_mubit": provider == "mubit", "prompt_digest": prompt_digest(role),
+                           "latency_s": round(time.time() - started, 2), "input_tokens": input_tokens,
+                           "output_tokens": output_tokens, "cost_usd": round(cost, 6) if cost is not None else None,
+                           "ok": ok, "stop_reason": stop_reason, "error": error})
+
+    def drain(self, run_id: str | None = None) -> list[dict[str, Any]]:
+        taken = [c for c in self.calls if run_id is None or c["run_id"] == run_id]
+        self.calls = [c for c in self.calls if c not in taken]
+        return taken
 
 
 EFFORTS = {"low", "medium", "high", "xhigh", "max"}
@@ -50,6 +99,7 @@ class Reply:
     model: str
     input_tokens: int = 0
     output_tokens: int = 0
+    stop_reason: str | None = None
 
 
 class Models(Protocol):
@@ -81,6 +131,7 @@ class AnthropicModels:
 
     def __init__(self) -> None:
         self._clients: dict[str, Any] = {}
+        self.ledger = Ledger()
 
     def _client(self, provider: str):
         if provider not in self._clients:
@@ -100,6 +151,18 @@ class AnthropicModels:
 
     def complete(self, role: str, user: str, *, run_id: str, max_tokens: int = 4096) -> Reply:
         provider, model, effort = role_target(role)
+        started = time.time()
+        try:
+            reply = self._complete(role, user, run_id, provider, model, effort, max_tokens)
+        except Exception as error:
+            self.ledger.record(role, run_id, provider, model, started, ok=False,
+                               error=f"{type(error).__name__}: {str(error)[:200]}")
+            raise
+        self.ledger.record(role, run_id, provider, reply.model, started, ok=True, input_tokens=reply.input_tokens,
+                           output_tokens=reply.output_tokens, stop_reason=reply.stop_reason)
+        return reply
+
+    def _complete(self, role, user, run_id, provider, model, effort, max_tokens) -> Reply:
         kwargs: dict[str, Any] = {}
         if provider == "mubit":
             kwargs["metadata"] = {"user_id": run_id}  # the gateway's session key on Anthropic calls
@@ -124,7 +187,7 @@ class AnthropicModels:
         usage = getattr(response, "usage", None)
         return Reply(text=text, provider=provider, model=getattr(response, "model", model),
                      input_tokens=getattr(usage, "input_tokens", 0) or 0,
-                     output_tokens=getattr(usage, "output_tokens", 0) or 0)
+                     output_tokens=getattr(usage, "output_tokens", 0) or 0, stop_reason=response.stop_reason)
 
 
 class ScriptedModels:
@@ -137,9 +200,11 @@ class ScriptedModels:
     def __init__(self, script: dict[str, list[Any] | Callable[[str], Any]]) -> None:
         self.script = {role: (list(v) if isinstance(v, list) else v) for role, v in script.items()}
         self.calls: list[dict[str, str]] = []
+        self.ledger = Ledger()
 
     def complete(self, role: str, user: str, *, run_id: str, max_tokens: int = 4096) -> Reply:
         self.calls.append({"role": role, "user": user, "run_id": run_id})
+        self.ledger.record(role, run_id, "scripted", "scripted", time.time(), ok=role in self.script)
         source = self.script.get(role)
         if source is None:
             raise ModelError(f"no scripted answer for role {role}")

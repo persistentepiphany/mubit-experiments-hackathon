@@ -28,4 +28,6 @@ def run_bundle(path: Path) -> dict[str, Any]:
         "results": run.read_json("RESULTS.json"),
         "research": run.read_json("research/extractions.json"),
         "events": read_events(path / "EVENTS.jsonl"),
+        "corrections": run.read_jsonl("CORRECTIONS.jsonl"),
+        "calls": run.read_jsonl("CALLS.jsonl"),
     }

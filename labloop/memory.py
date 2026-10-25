@@ -70,9 +70,11 @@ class LocalMemory:
         wanted = _words(query)
         scored = []
         for lesson in self._read(self.lessons):
-            overlap = len(wanted & _words(lesson["content"]))
+            overlap = len(wanted & _words(lesson["content"] + " " + json.dumps(lesson.get("metadata") or {})))
             if overlap:
-                scored.append((overlap, lesson["at"], lesson))
+                # A person's correction outranks lessons the system wrote for itself.
+                boost = 3 if lesson.get("lesson_type") == "correction" else 0
+                scored.append((overlap + boost, lesson["at"], lesson))
         scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
         return [{"id": l["id"], "content": l["content"], "lesson_type": l["lesson_type"],
                  "source": "local"} for _, _, l in scored[:limit]]
