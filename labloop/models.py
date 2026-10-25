@@ -25,18 +25,19 @@ PROVIDERS: dict[str, dict[str, Any]] = {
 }
 
 ROLE_DEFAULTS = {
-    "planner": "mubit:claude-opus-5@high",
+    "planner": "mubit:claude-opus-4-8@high",
     "researcher": "mubit:claude-haiku-5-5",
     "extractor": "mubit:claude-haiku-5-5",
     "applicability": "mubit:claude-haiku-5-5",
-    "reviewer": "mubit:claude-opus-5@high",
+    "reviewer": "mubit:claude-opus-4-8@high",
     "corrector": "mubit:claude-haiku-5-5",
 }
 
 # List prices in USD per million input and output tokens, for the cost column of the call ledger.
 # A model missing here has its cost left blank rather than guessed; LABLOOP_PRICE_<MODEL> ("in,out")
 # adds one, with the model id upper-cased and its dots and dashes written as underscores.
-PRICES = {"claude-opus-5": (5.0, 25.0), "claude-opus-5-5": (4.0, 20.0), "claude-sonnet-5-5": (2.0, 10.0),
+PRICES = {"claude-opus-4-8": (5.0, 25.0), "claude-opus-5": (5.0, 25.0), "claude-opus-5-5": (4.0, 20.0),
+          "claude-sonnet-5-5": (2.0, 10.0),
           "claude-haiku-5-5": (0.10, 0.50)}
 
 

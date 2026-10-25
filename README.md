@@ -29,7 +29,7 @@ flowchart LR
 
     roleCall["Role or PaperQA2 call<br/>fixed system prompt<br/>metadata.user_id = run id"]
     gw["Mubit gateway<br/>api.mubit.ai/anthropic<br/>x-middleware-record: full<br/>x-middleware-store: true"]
-    anth["Anthropic<br/>Opus 5, Sonnet 5.5, Haiku 5.5"]
+    anth["Anthropic<br/>Opus 4.8, Sonnet 5.5, Haiku 5.5"]
     req["Mubit Requests<br/>run id as session"]
     task["Mubit task<br/>model + fixed system prompt<br/>(prompt_digest in the ledger)"]
     ex["Kept examples"]
@@ -50,11 +50,11 @@ Mubit groups calls into a task by model and system prompt. Each prompt in `lablo
 
 | Role | Purpose | Default through Mubit | Why it repeats |
 | --- | --- | --- | --- |
-| planner | Pipeline, acceptance checks, skill description | Opus 5 at high effort | Every new task, one output schema |
+| planner | Pipeline, acceptance checks, skill description | Opus 4.8 at high effort | Every new task, one output schema |
 | researcher | Europe PMC queries | Haiku 5.5 | Every researched task |
 | extractor | Sourced procedure, numbers and guidance from PaperQA2 answers | Haiku 5.5 | Every run and every tool card |
 | applicability | Whether a saved skill fits, and the input mapping | Haiku 5.5 | Every task |
-| reviewer | Lessons after grading | Opus 5 at high effort | Every finished run |
+| reviewer | Lessons after grading | Opus 4.8 at high effort | Every finished run |
 | corrector | One rule from a failed run's checks and lessons | Haiku 5.5 | Every failed or inconclusive run |
 
 PaperQA2 also calls Mubit, through LiteLLM, with Sonnet 5.5 for answers and Haiku 5.5 for summaries. The `labloop-routing` Modal secret can override a role's model with `LABLOOP_MODEL_<ROLE>`.

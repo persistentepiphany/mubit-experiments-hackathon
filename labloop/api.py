@@ -59,6 +59,16 @@ def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str
     app = FastAPI(title="labloop", version="0.1.0")
     skills = SkillStore(state.skills)
 
+    def interrupted(run_id: str, status: dict[str, Any]) -> str | None:
+        """Why an unfinished run will not finish: its orchestrator call ended without a verdict."""
+        if status.get("phase") in ("done", "error"):
+            return None
+        try:
+            call = call_state(run_id)
+        except Exception:
+            return None
+        return call if call not in (None, "queued") else None
+
     @app.post("/tasks", status_code=202)
     def post_task(task: TaskIn) -> dict[str, Any]:
         run_id = new_run_id()
@@ -79,7 +89,14 @@ def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str
             status = run.read_json("run.json", {}) or {}
             task = run.read_json("task.json", {}) or {}
             events = read_events(path / "EVENTS.jsonl") if status.get("phase") not in ("done", "error") else []
+            stopped = interrupted(path.name, status)
+            if stopped:
+                status = {**status, "phase": "error", "error": stopped}
+                events = []
+            match = run.read_json("match.json", {}) or {}
             runs.append({"project": task.get("project") or "General",
+                         "matched_skill": match.get("skill") if match.get("decision") == "reuse" else None,
+                         "corrects": task.get("corrects"), "corrected_by": status.get("corrected_by"),
                          "activity": events[-1] if events else None,
                          "in_flight": in_flight(events),
                          "run_id": path.name, "description": task.get("description"), "phase": status.get("phase"),
@@ -101,7 +118,12 @@ def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str
             if call == "queued":
                 return {"run_id": run_id, "phase": "queued"}
             return {"run_id": run_id, "phase": "error", "status": {"phase": "error", "error": call}}
-        return run_bundle(path)
+        bundle = run_bundle(path)
+        stopped = interrupted(run_id, bundle["status"] or {})
+        if stopped:
+            bundle["status"] = {**bundle["status"], "phase": "error",
+                                "error": f"The orchestrator stopped before this run finished ({stopped})."}
+        return bundle
 
     @app.post("/runs/{run_id}/corrections", status_code=202)
     def correct(run_id: str, body: CorrectionIn) -> dict[str, Any]:
