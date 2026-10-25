@@ -22,8 +22,6 @@ from labloop import prompts
 
 PROVIDERS: dict[str, dict[str, Any]] = {
     "mubit": {"base_url": "https://api.mubit.ai/anthropic", "key_env": ("MUBIT_API_KEY", "MUBIT_API_TOKEN")},
-    "zai": {"base_url": "https://api.z.ai/api/anthropic", "key_env": ("ZAI_API_KEY",)},
-    "moonshot": {"base_url": "https://api.moonshot.ai/anthropic", "key_env": ("MOONSHOT_API_KEY",)},
 }
 
 ROLE_DEFAULTS = {
@@ -63,18 +61,22 @@ class Ledger:
 
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
+        # Called with each call as it is recorded; returns True when it stored the call itself.
+        self.sink: Callable[[dict[str, Any]], bool] | None = None
 
     def record(self, role: str, run_id: str, provider: str, model: str, started: float, *, ok: bool,
                input_tokens: int = 0, output_tokens: int = 0, error: str | None = None,
                stop_reason: str | None = None) -> None:
         rates = price(model)
         cost = (input_tokens * rates[0] + output_tokens * rates[1]) / 1e6 if rates else None
-        self.calls.append({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "role": role,
-                           "run_id": run_id, "provider": provider, "model": model,
-                           "recorded_by_mubit": provider == "mubit", "prompt_digest": prompt_digest(role),
-                           "latency_s": round(time.time() - started, 2), "input_tokens": input_tokens,
-                           "output_tokens": output_tokens, "cost_usd": round(cost, 6) if cost is not None else None,
-                           "ok": ok, "stop_reason": stop_reason, "error": error})
+        call = {"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "role": role,
+                "run_id": run_id, "provider": provider, "model": model,
+                "recorded_by_mubit": provider == "mubit", "prompt_digest": prompt_digest(role),
+                "latency_s": round(time.time() - started, 2), "input_tokens": input_tokens,
+                "output_tokens": output_tokens, "cost_usd": round(cost, 6) if cost is not None else None,
+                "ok": ok, "stop_reason": stop_reason, "error": error}
+        if not (self.sink and self.sink(call)):
+            self.calls.append(call)
 
     def drain(self, run_id: str | None = None) -> list[dict[str, Any]]:
         taken = [c for c in self.calls if run_id is None or c["run_id"] == run_id]
@@ -114,8 +116,6 @@ def role_target(role: str) -> tuple[str, str, str | None]:
         raise ModelError(f"effort {effort!r} for role {role} must be one of {sorted(EFFORTS)}")
     if provider not in PROVIDERS or not model:
         raise ModelError(f"model spec {spec!r} for role {role} must be provider:model, provider one of {sorted(PROVIDERS)}")
-    if provider == "zai" and "[" in model:
-        raise ModelError(f"Z.AI takes plain model ids; {model!r} carries a bracket suffix")
     return provider, model, effort or None
 
 
@@ -169,13 +169,8 @@ class AnthropicModels:
         if effort:
             kwargs["output_config"] = {"effort": effort}
             max_tokens = max(max_tokens, 16000)  # thinking at higher effort shares this budget with the answer
-        if provider == "zai":
-            # GLM always reasons and cannot turn it off; capping the reasoning leaves room for the answer.
-            max_tokens = max(max_tokens, 32000)
-            kwargs["thinking"] = {"type": "enabled",
-                                  "budget_tokens": int(os.environ.get("LABLOOP_ZAI_THINKING_BUDGET", "12000"))}
         messages = self._client(provider).messages
-        if provider != "zai" and model in FALLBACK_MODELS:
+        if model in FALLBACK_MODELS:
             messages = self._client(provider).beta.messages
             kwargs.update(betas=[FALLBACK_BETA], fallbacks="default")
         # Streamed, because large budgets exceed the SDK's limit for a single blocking request.

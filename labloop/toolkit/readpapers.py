@@ -1,9 +1,9 @@
 """PaperQA2 over frozen corpora, as harness-experiments `lit/README.md` runs it.
 
 PaperQA2 routes every model call through LiteLLM. Here LiteLLM speaks the
-Anthropic Messages format to the provider a spec names (`mubit:<model>` by
-default, so the summary and answer calls are recorded by the gateway like every
-other call, or `zai:<model>`). Embeddings are a local
+Anthropic Messages format through the Mubit gateway (`mubit:<model>`), so the
+summary and answer calls are recorded by the gateway like every other call.
+Embeddings are a local
 sentence-transformers model, because the gateway serves embeddings only in the
 OpenAI format. The configuration sends no `temperature`, which the Anthropic
 API no longer accepts.
@@ -17,9 +17,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-PROVIDERS = {"mubit": ("https://api.mubit.ai/anthropic", ("MUBIT_API_KEY", "MUBIT_API_TOKEN")),
-             "zai": ("https://api.z.ai/api/anthropic", ("ZAI_API_KEY",)),
-             "moonshot": ("https://api.moonshot.ai/anthropic", ("MOONSHOT_API_KEY",))}
+PROVIDERS = {"mubit": ("https://api.mubit.ai/anthropic", ("MUBIT_API_KEY", "MUBIT_API_TOKEN"))}
 EMBEDDING = "st-multi-qa-MiniLM-L6-cos-v1"
 
 

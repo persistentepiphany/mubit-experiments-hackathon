@@ -80,6 +80,13 @@ def research(task: dict[str, Any], *, run: RunDir, run_id: str, dispatcher: Disp
     summary: dict[str, Any] = {"queries": queries, "query_error": query_error, "limits": cap, "papers": [],
                                "corpus": None, "paperqa": None, "extraction": None, "errors": []}
     corpora = list(SEED_CORPORA)
+
+    def save() -> None:
+        # Written after each stage, so the run page lists papers and answers while research continues.
+        (run.path / "research").mkdir(exist_ok=True)
+        run.write_json("research/extractions.json", summary)
+
+    save()
     emit("start", f"Building the corpus on Modal: Europe PMC ({cap['page_size']} per query), OpenAlex citations, "
                   f"full text, frozen manifest", phase="research", key="corpus")
     try:
@@ -98,6 +105,7 @@ def research(task: dict[str, Any], *, run: RunDir, run_id: str, dispatcher: Disp
     except Exception as error:
         summary["errors"].append(f"corpus: {error}")
         emit("error", f"Corpus failed: {str(error)[:300]}", phase="research", key="corpus")
+    save()
 
     if corpora:
         emit("start", f"PaperQA2 reading {len(corpora)} frozen corpora on Modal (this run's corpus and the "
@@ -117,6 +125,7 @@ def research(task: dict[str, Any], *, run: RunDir, run_id: str, dispatcher: Disp
         except Exception as error:
             summary["errors"].append(f"paperqa: {error}")
             emit("error", f"PaperQA2 failed: {str(error)[:300]}", phase="research", key="paperqa")
+        save()
 
     if summary["paperqa"]:
         evidence = [{"question": a["question"], "answer": a["answer"],
@@ -130,6 +139,5 @@ def research(task: dict[str, Any], *, run: RunDir, run_id: str, dispatcher: Disp
             summary["errors"].append(f"extraction: {error}")
             emit("error", f"Extraction failed: {str(error)[:300]}", phase="research")
 
-    (run.path / "research").mkdir(exist_ok=True)
-    run.write_json("research/extractions.json", summary)
+    save()
     return summary

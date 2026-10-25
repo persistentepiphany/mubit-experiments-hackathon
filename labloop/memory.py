@@ -72,7 +72,7 @@ class LocalMemory:
         for lesson in self._read(self.lessons):
             overlap = len(wanted & _words(lesson["content"] + " " + json.dumps(lesson.get("metadata") or {})))
             if overlap:
-                # A person's correction outranks lessons the system wrote for itself.
+                # A correction outranks ordinary lessons.
                 boost = 3 if lesson.get("lesson_type") == "correction" else 0
                 scored.append((overlap + boost, lesson["at"], lesson))
         scored.sort(key=lambda item: (item[0], item[1]), reverse=True)

@@ -195,14 +195,16 @@ def test_a_correction_becomes_a_rule_that_changes_the_next_plan(tmp_path):
         "corrector": [{"rule": "For short peptides use a mean pLDDT threshold of 60 with ESMFold.",
                        "role": "planner", "replan": True, "summary": "lower the threshold"}]})
     task = {"description": "Fold this short peptide", "inputs": {"sequence": "MKTAYIAKQRQ"}}
+    loop.auto_correct = True
     failed = loop.run_task(task)
-    assert failed["verdict"] == "FAIL"
-    record = loop.correct(failed["run_id"], "The 95 threshold is too strict for a short peptide; use 60.")
-    assert record["role"] == "planner" and "60" in record["rule"]
-    fixed = loop.run_task({**task, "replan": True, "corrects": failed["run_id"]})
+    assert failed["verdict"] == "FAIL" and failed["corrected_by"]
+    record = json.loads((loop.state.run_dir(failed["run_id"]) / "CORRECTIONS.jsonl").read_text())
+    assert record["role"] == "planner" and "60" in record["rule"] and record["by"] == "Mubit corrector"
+    fixed = json.loads((loop.state.run_dir(failed["corrected_by"]) / "run.json").read_text())
+    fixed["run_id"] = failed["corrected_by"]
     assert fixed["verdict"] == "PASS"
     planner_input = json.loads([c for c in models.calls if c["role"] == "planner"][-1]["user"])
-    assert planner_input["corrections_from_people"] == [record["rule"]]
+    assert planner_input["corrections"] == [record["rule"]]
     run = loop.state.run_dir(fixed["run_id"])
     assert json.loads((run / "match.json").read_text())["decision"] == "plan"
     assert (run / "CALLS.jsonl").exists()

@@ -5,7 +5,7 @@ Volume. Each task runs in a spawned `orchestrate` call, the only writer of
 state, limited to one container so that two runs never write the skill store
 at once. Keys come from the Modal Secret `labloop-keys`.
 
-    modal secret create labloop-keys MUBIT_API_KEY=... ZAI_API_KEY=... [MOONSHOT_API_KEY=...] [MUBIT_PROJECT_ID=...]
+    modal secret create labloop-keys MUBIT_API_KEY=... [MUBIT_PROJECT_ID=...]
     modal deploy modal_apps/backend_app.py
     modal run modal_apps/backend_app.py::retire --name <skill> --by "<person>" --reason "<why>"
 """
@@ -56,7 +56,7 @@ def orchestrate(task: dict, run_id: str, force_skill: str | None = None) -> dict
     state = StateRoot(STATE, commit=state_volume.commit, reload=state_volume.reload)
     loop = Loop(state, models=AnthropicModels(), dispatcher=ModalDispatcher(),
                 memory=memory.from_env(state.memory), graders=default_graders(),
-                artifacts_root=ARTIFACTS, artifacts_reload=artifacts_volume.reload)
+                artifacts_root=ARTIFACTS, artifacts_reload=artifacts_volume.reload, auto_correct=True)
     return loop.run_task(task, run_id=run_id, force_skill=force_skill)
 
 

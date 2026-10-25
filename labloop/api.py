@@ -188,6 +188,46 @@ def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str
                              "verdict": verdict}] + g["recent"])[:6]
         return {"projects": sorted(grouped.values(), key=lambda g: g["latest"] or "", reverse=True)}
 
+    @app.get("/library")
+    def library() -> dict[str, Any]:
+        """Every report with its figures, and every paper a run or a knowledge card read."""
+        state.reload()
+        reports, papers = [], {}
+        for path in sorted(state.runs.glob("r-*"), reverse=True) if state.runs.exists() else []:
+            run = RunDir(path)
+            task = run.read_json("task.json", {}) or {}
+            status = run.read_json("run.json", {}) or {}
+            folder = state.root / "reports" / path.name
+            if (folder / "report.html").exists():
+                reports.append({"run_id": path.name, "description": task.get("description"),
+                                "project": task.get("project"), "verdict": status.get("verdict"),
+                                "at": (status.get("history") or [{}])[0].get("at"),
+                                "figures": sorted(f.name for f in (folder / "figures").glob("*.png"))})
+            research = run.read_json("research/extractions.json", {}) or {}
+            corpus = (research.get("corpus") or {}).get("path")
+            for doc in research.get("papers") or []:
+                key = doc.get("doi") or doc.get("title")
+                if not key:
+                    continue
+                entry = papers.setdefault(key, {**{k: doc.get(k) for k in ("title", "year", "doi", "pmcid", "journal",
+                                                                           "citations", "text_source")},
+                                                "file": f"{corpus}/{doc['file']}" if corpus and doc.get("file") else None,
+                                                "runs": []})
+                entry["runs"].append(path.name)
+        from labloop.knowledge import KnowledgeStore
+
+        for c in KnowledgeStore(state.knowledge).all():
+            for doc in c.get("papers", []):
+                key = doc.get("doi") or doc.get("title")
+                if not key:
+                    continue
+                entry = papers.setdefault(key, {**{k: doc.get(k) for k in ("title", "year", "doi", "pmcid", "journal",
+                                                                           "citations", "text_source")},
+                                                "file": (f"{c['corpus']}/{doc['file']}" if c.get("corpus")
+                                                         and doc.get("file") else None), "runs": []})
+                entry.setdefault("tools", []).append(c["tool"])
+        return {"reports": reports, "papers": sorted(papers.values(), key=lambda p: -len(p["runs"]))}
+
     @app.get("/knowledge")
     def knowledge() -> dict[str, Any]:
         state.reload()

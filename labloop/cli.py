@@ -21,8 +21,6 @@ def _probe(args) -> int:
     targets = {}
     for role in ROLE_DEFAULTS:
         targets.setdefault(role_target(role), []).append(role)
-    if os.environ.get("MOONSHOT_API_KEY"):
-        targets.setdefault(("moonshot", os.environ.get("LABLOOP_KIMI_MODEL", "kimi-k3[1m]"), None), []).append("probe")
     models = AnthropicModels()
     failures = 0
     for (provider, model, effort), roles in targets.items():

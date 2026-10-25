@@ -56,8 +56,9 @@ def _short(result: dict[str, Any]) -> dict[str, Any]:
 class Loop:
     def __init__(self, state: StateRoot, *, models: Models, dispatcher: Dispatcher, memory: Memory,
                  graders: list[DomainGrader] = (), artifacts_root: Path | None = None,
-                 artifacts_reload=None) -> None:
+                 artifacts_reload=None, auto_correct: bool = False) -> None:
         self.state = state
+        self.auto_correct = auto_correct
         self.artifacts_reload = artifacts_reload
         self.models = models
         self.dispatcher = dispatcher
@@ -65,6 +66,17 @@ class Loop:
         self.graders = list(graders)
         self.artifacts_root = artifacts_root
         self.skills = SkillStore(state.skills)
+        ledger = getattr(models, "ledger", None)
+        if ledger is not None and ledger.sink is None:
+            ledger.sink = self._store_call
+
+    def _store_call(self, call: dict[str, Any]) -> bool:
+        """Write each model call into its run as it happens, so the run page shows it live."""
+        path = self.state.run_dir(call["run_id"])
+        if not path.exists():
+            return False
+        RunDir(path).append("CALLS.jsonl", call)
+        return True
 
     # ------------------------------------------------------------------ match
     def _check_applicability(self, answer: Any, candidates: dict[str, dict], inputs: dict[str, Any]) -> list[str]:
@@ -112,7 +124,7 @@ class Loop:
         record: dict[str, Any] = {"candidates": sorted(candidates), "lessons": [l.get("id") for l in lessons]}
         if task.get("replan"):
             decision = {"decision": "plan", "skill": None,
-                        "reason": f"a person's correction of run {task.get('corrects') or 'an earlier run'} asked "
+                        "reason": f"the correction of run {task.get('corrects') or 'an earlier run'} asked "
                                   "for a fresh plan, so no saved skill is reused"}
             candidates = {}
         elif not candidates:
@@ -194,7 +206,7 @@ class Loop:
                                     for a in ((findings.get("paperqa") or {}).get("answers") or [])],
                 "extraction": findings.get("extraction"),
             },
-            "corrections_from_people": [l["content"] for l in lessons if l.get("lesson_type") == "correction"],
+            "corrections": [l["content"] for l in lessons if l.get("lesson_type") == "correction"],
             "advisory_lessons": [l["content"] for l in lessons if l.get("lesson_type") != "correction"],
         }, indent=1)
         try:
@@ -480,6 +492,28 @@ class Loop:
             emit("error", f"Run stopped: {type(error).__name__}: {str(error)[:300]}")
         self._write_calls(run, run_id)
         self.state.commit()
+        if self.auto_correct and record.get("verdict") in ("FAIL", "INCONCLUSIVE") and not task.get("corrects"):
+            record = self._correct_and_rerun(task, run_id, run, record)
+        return record
+
+    def _correct_and_rerun(self, task: dict[str, Any], run_id: str, run: RunDir,
+                           record: dict[str, Any]) -> dict[str, Any]:
+        """The corrector reads the failed checks and writes a rule; the task is then planned again once."""
+        results = run.read_json("RESULTS.json", {}) or {}
+        failed = [f"{c['id']} {c.get('metric')} observed {c.get('observed')} ({c['status']})"
+                  for c in results.get("checks", []) if c.get("status") != "PASS"]
+        text = (f"The run graded {record.get('verdict')}. Checks that did not pass: "
+                + ("; ".join(failed) or "none recorded") + ".")
+        try:
+            correction = self.correct(run_id, text, by="Mubit corrector")
+        except Exception:
+            return record
+        if not correction.get("replan", True):
+            return record
+        follow_id = new_run_id()
+        record = run.status("done", corrected_by=follow_id)
+        self.state.commit()
+        self.run_task({**task, "replan": True, "corrects": run_id}, run_id=follow_id)
         return record
 
     def _write_calls(self, run: RunDir, run_id: str) -> None:
@@ -489,7 +523,7 @@ class Loop:
 
     # ------------------------------------------------------------- correction
     def correct(self, run_id: str, text: str, by: str = "a person") -> dict[str, Any]:
-        """Turn a person's correction of a finished run into a rule the next plan follows."""
+        """Turn a correction of a finished run into a rule the next plan follows."""
         from labloop.bundle import run_bundle
 
         path = self.state.run_dir(run_id)
@@ -505,9 +539,10 @@ class Loop:
             "outcome": {"verdict": (bundle.get("status") or {}).get("verdict"),
                         "checks": (bundle.get("results") or {}).get("checks"),
                         "summary": (bundle.get("status") or {}).get("summary")},
+            "reviewer_lessons": (bundle.get("status") or {}).get("lesson_texts"),
             "correction": text,
         }, indent=1, default=str)
-        emit("start", f"Correction from {by}: {text[:200]}", phase="learn", key="correction")
+        emit("start", f"Mubit corrector reviewing the outcome: {text[:200]}", phase="learn", key="correction")
         try:
             answer, replies = ask_json(self.models, "corrector", user, run_id=run_id, max_tokens=2048,
                                        check=lambda a: [] if isinstance(a, dict) and isinstance(a.get("rule"), str)
@@ -528,7 +563,7 @@ class Loop:
                   "recorded_by_mubit": replies[-1].provider == "mubit",
                   "memory": self._mirror_status(before)}
         run.append("CORRECTIONS.jsonl", record)
-        emit("done", f"Correction stored as a {role} rule: {answer['rule'][:200]}", phase="learn", key="correction")
+        emit("done", f"Mubit correction stored as a {role} rule: {answer['rule'][:200]}", phase="learn", key="correction")
         self._write_calls(run, run_id)
         self.state.commit()
         return record

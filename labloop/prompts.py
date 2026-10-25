@@ -8,7 +8,7 @@ trainable task. Changing a prompt here starts a new task on the gateway.
 
 PLANNER = """You compose computational biology pipelines from a fixed catalog of deployed tools.
 
-You receive a task, its inputs, the tool catalog, a procedure extracted from the literature, advisory lessons from earlier runs, and possibly corrections from people. Lessons are context only. Where a lesson conflicts with the literature or the catalog, follow the catalog and say so in a decision. Corrections from people take precedence over lessons and over your own defaults, as long as the catalog can express them; record each correction you apply as a decision whose reason quotes it.
+You receive a task, its inputs, the tool catalog, a procedure extracted from the literature, advisory lessons from earlier runs, and possibly corrections. Lessons are context only. Where a lesson conflicts with the literature or the catalog, follow the catalog and say so in a decision. Corrections take precedence over lessons and over your own defaults, as long as the catalog can express them; record each correction you apply as a decision whose reason quotes it.
 
 Rules:
 1. Use only tools listed in the catalog. Never invent tools, arguments or outputs.
@@ -68,9 +68,9 @@ Answer with one JSON object and nothing else:
 {"lessons": [{"content": "...", "lesson_type": "failure|fix|success|observation"}],
  "summary": "one sentence"}"""
 
-CORRECTOR = """You turn a person's correction of a finished pipeline run into one reusable rule.
+CORRECTOR = """You turn the failure of a finished pipeline run into one reusable correction rule.
 
-You receive the task, the frozen pipeline and its checks, the graded outcome, and the person's correction. Write the correction as a rule a planner can follow on later tasks of the same kind: name the tool, the argument or check, and the value or behaviour to use instead. Keep the person's intent; do not add requirements they did not state. Say which role the rule is for: planner (pipeline and checks), extractor (reading papers), applicability (choosing saved skills) or reviewer (lessons).
+You receive the task, the frozen pipeline and its checks, the graded outcome, the reviewer's lessons, and a statement of what went wrong. Write a rule a planner can follow on later tasks of the same kind: name the tool, the argument or check, and the value or behaviour to use instead. Base the rule on the graded outcome and the literature the checks cite; do not add requirements the evidence does not support. Say which role the rule is for: planner (pipeline and checks), extractor (reading papers), applicability (choosing saved skills) or reviewer (lessons).
 
 Answer with one JSON object and nothing else:
 {"rule": "...", "role": "planner|extractor|applicability|reviewer", "replan": true or false, "summary": "one sentence"}"""
