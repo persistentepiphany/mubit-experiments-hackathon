@@ -94,7 +94,9 @@ def _count(n: int, word: str, plural: str | None = None) -> str:
 
 
 def _cap(text: str) -> str:
-    return text[:1].upper() + text[1:] if text else text
+    if not text or text[1:2].isupper():
+        return text
+    return text[:1].upper() + text[1:]
 
 
 def _time(value: Any) -> datetime | None:
@@ -531,6 +533,7 @@ def structure_figures(trace: dict[str, Any], predicted: bool, title: str) -> tup
         index += len(residues)
     radius = float(np.abs(coords).max()) * 1.04 or 1.0
     chain_color = [CHAIN_COLORS[min(i, len(CHAIN_COLORS) - 1)] for i in range(len(trace["chains"]))]
+    thin = min(1.0, max(0.45, math.sqrt(150 / max(1, len(coords)))))
 
     with matplotlib.rc_context(_style()):
         fig = Figure(figsize=(7.2, 7.7))
@@ -553,13 +556,13 @@ def structure_figures(trace: dict[str, Any], predicted: bool, title: str) -> tup
                 if complex_:
                     lines.append(segments[o])
                     colors.append(chain_color[seg_chain[o]])
-                    widths.append(4.6 + 1.6 * near)
+                    widths.append((4.2 + 1.4 * near) * thin)
                 lines.append(segments[o])
                 if predicted:
                     colors.append(cmap(norm(seg_conf[o])))
                 else:
                     colors.append(chain_color[seg_chain[o]] if complex_ else INK)
-                widths.append((1.5 + 1.3 * near) if complex_ else (1.6 + 1.6 * near))
+                widths.append(((1.4 + 1.2 * near) if complex_ else (1.6 + 1.6 * near)) * thin)
             if lines:
                 ax.add_collection3d(Line3DCollection(lines, colors=colors, linewidths=widths,
                                                      capstyle="round", joinstyle="round"))
@@ -570,10 +573,11 @@ def structure_figures(trace: dict[str, Any], predicted: bool, title: str) -> tup
                     ax.text(p[0], p[1], p[2], f" {chain['id']}", fontsize=8.5, fontweight="bold",
                             color=chain_color[ci])
                     start += len(chain["residues"])
-        fig.subplots_adjust(left=0.0, right=1.0, top=0.96, bottom=0.13 if predicted or complex_ else 0.02,
+        bottom = 0.02 + (0.1 if predicted else 0) + (0.035 * math.ceil(len(trace["chains"]) / 4) if complex_ else 0)
+        fig.subplots_adjust(left=0.0, right=1.0, top=0.96, bottom=bottom,
                             wspace=0.0, hspace=0.06)
         if predicted:
-            cax = fig.add_axes([0.2, 0.065, 0.6, 0.018])
+            cax = fig.add_axes([0.2, bottom - 0.045, 0.6, 0.016])
             bar = fig.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax,
                                orientation="horizontal", ticks=[0, 50, 70, 90, 100])
             bar.outline.set_visible(False)
@@ -584,9 +588,7 @@ def structure_figures(trace: dict[str, Any], predicted: bool, title: str) -> tup
                               label=f"chain {c['id']} ({len(c['residues'])} res.)")
                        for i, c in enumerate(trace["chains"])]
             fig.legend(handles=handles, loc="lower center", ncol=min(4, len(handles)), frameon=False,
-                       fontsize=8, bbox_to_anchor=(0.5, 0.0 if predicted else 0.02))
-            if predicted:
-                cax.set_position([0.2, 0.085, 0.6, 0.016])
+                       fontsize=8, bbox_to_anchor=(0.5, 0.0))
         views = _png(fig)
 
     if not predicted:
