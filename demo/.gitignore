@@ -11,3 +11,4 @@ ndemo/folio-tour/*.mp4
 ndemo/folio-tour/*.srt
 video/package.json
 video/tsconfig.json
+video/seed/artifacts/*/research_corpus/

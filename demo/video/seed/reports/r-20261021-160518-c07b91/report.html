@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Run report r-20261021-160518-c07b91</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@300;400;500&amp;display=swap" rel="stylesheet"><style>
+:root{--bg:#f1ebe1;--ink:#2a2622;--muted:#8a847a;--card:#fff;--soft:#faf7f2;--line:rgba(42,38,34,.08);
+--olive:#a3a07a;--clay:#c9937a;--slate:#8da2b8;--slatebg:#e6ecf2;--okbg:#e9ead9;--runbg:#f3e3da;--failbg:#f2dcd6;--fail:#b4654f}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Geist',system-ui,-apple-system,sans-serif;
+font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+main{max-width:780px;margin:0 auto;padding:32px 16px 56px;display:flex;flex-direction:column;gap:16px}
+h1,h2{font-family:'Instrument Serif',Georgia,serif;font-weight:400;letter-spacing:-.01em;margin:0}
+h1{font-size:34px;line-height:1.12;text-wrap:balance}
+h2{font-size:24px;margin-bottom:10px}
+h3{font-size:13px;font-weight:500;margin:18px 0 6px;color:var(--ink)}
+p{margin:0 0 10px}p:last-child{margin-bottom:0}
+.card{background:var(--card);border-radius:16px;padding:20px;box-shadow:0 1px 0 rgba(42,38,34,.04),0 8px 30px rgba(42,38,34,.05)}
+.eyebrow{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.head{display:flex;flex-direction:column;gap:12px;padding:8px 0}
+.pill{display:inline-block;font-size:12px;font-weight:500;letter-spacing:.04em;padding:4px 11px;border-radius:999px;vertical-align:middle}
+.pill.PASS{background:var(--okbg);color:#5d5b3c}.pill.FAIL{background:var(--failbg);color:var(--fail)}
+.pill.INCONCLUSIVE,.pill.UNVERIFIABLE{background:var(--slatebg);color:#4c6075}
+.pill.ERROR{background:var(--failbg);color:var(--fail)}.pill.IN{background:var(--runbg);color:#8a5a43}
+.pill.NOT{background:var(--soft);color:var(--muted)}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 18px;margin-top:4px}
+.meta div{font-size:13px;overflow-wrap:anywhere}.meta span{display:block;font-size:11px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.lead{font-size:16px}
+.quote{border-left:3px solid var(--okbg);padding:2px 0 2px 12px;margin:10px 0;color:var(--ink)}
+.muted{color:var(--muted)}.small{font-size:12.5px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:var(--soft);padding:1px 5px;border-radius:5px;overflow-wrap:anywhere}
+figure{margin:14px 0 4px}figure img{display:block;width:100%;height:auto;border-radius:10px}
+figcaption{font-size:12.5px;color:var(--muted);margin-top:6px}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px 0}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font-weight:500;color:var(--muted);font-size:11.5px;text-align:left;letter-spacing:.03em;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+ul.plain{margin:6px 0;padding-left:18px}ul.plain li{margin:4px 0}
+details{margin:8px 0;border-top:1px solid var(--line);padding-top:8px}
+summary{cursor:pointer;font-size:13px;color:var(--ink)}
+details>div{padding:8px 0 2px;font-size:13.5px}
+.note{font-size:12.5px;color:var(--muted);margin-top:10px}
+footer{font-size:11.5px;color:var(--muted);text-align:center}
+@media (max-width:520px){h1{font-size:28px}.card{padding:16px}main{padding-top:20px}}
+</style></head><body><main><header class="head"><div class="eyebrow">labloop run report</div><h1>Predict the 3D structure of this single protein chain and report whether the fold is confident.</h1><div><span class="pill PASS">PASS</span></div><div class="meta"><div><span>Origin</span>Skill esmfold_short_chain_fold v1</div><div><span>Run</span><code>r-20261021-160518-c07b91</code></div><div><span>Duration</span>36 s</div><div><span>Started</span>21 October 2026, 16:05 UTC</div></div></header><section class="card"><h2>Outcome</h2><p class="lead">The run passed all 2 checks. Mean pLDDT was 78.4, above the floor of 70 and pTM was 0.360, above the floor of 0.300.</p><div class="eyebrow" style="margin-top:14px">Reviewer summary</div><p class="quote">The saved skill folded Trp-cage at pLDDT 78.4 and pTM 0.36, and both frozen checks passed.</p></section><section class="card"><h2>How the pipeline was chosen</h2><p>The task matched the saved skill <code>esmfold_short_chain_fold</code> (version 1), so its frozen pipeline ran again and the research and planning phases were skipped.</p><div class="eyebrow">Condition matched</div><p class="quote">the task asks for the structure of one protein chain of under 50 residues given its sequence</p><div class="scroll"><table><thead><tr><th>Skill input</th><th>Taken from</th></tr></thead><tbody><tr><td><code>sequence</code></td><td>task input <code>sequence</code></td></tr></tbody></table></div><figure><img src="figures/pipeline.png" alt="Pipeline diagram: esmfold" loading="lazy"><figcaption>The frozen pipeline, 1 step in dependency order. Box outlines show each step's outcome (olive finished, rust failed, grey skipped).</figcaption></figure><p class="note">The run was added as evidence to skill <code>esmfold_short_chain_fold</code>, now at version 2 with standing validated.</p></section><section class="card"><h2>Metrics</h2><figure><img src="figures/metrics.png" alt="Observed value of each check against its threshold" loading="lazy"><figcaption>Each bar is the observed value measured from zero; the shaded region passes and the vertical line is the threshold. A dashed line marks a published reference with its tolerance band. Olive passed, rust failed, slate could not be verified.</figcaption></figure><div class="scroll"><table><thead><tr><th>Check</th><th>Observed</th><th>Criterion</th><th>Status</th></tr></thead><tbody><tr><td>confident_fold<div class="small muted">fold.scores.mean_plddt</div></td><td class=num>78.4</td><td>≥ 70</td><td><span class="pill PASS">PASS</span></td></tr><tr><td>global_fold<div class="small muted">fold.scores.ptm</div></td><td class=num>0.360</td><td>≥ 0.300</td><td><span class="pill PASS">PASS</span></td></tr></tbody></table></div></section><section class="card"><h2>Structure</h2><h3>fold <span class="muted">(esmfold, model.pdb)</span></h3><p>The model has 20 residues in chain A (20 residues). Mean per-residue confidence is 78.4; 90% of residues reach 70 and 15% reach 90.</p><figure><img src="figures/structure_fold.png" alt="C-alpha trace of fold from four angles" loading="lazy"><figcaption>C-alpha trace from four orthographic angles after alignment to the principal axes, colored by per-residue pLDDT read from the B-factor column.</figcaption></figure><figure><img src="figures/confidence_fold.png" alt="Per-residue pLDDT for fold" loading="lazy"><figcaption>Per-residue pLDDT with the confident (70 to 90) and very high (90 and above) bands shaded. Gaps in residue numbering are left as gaps.</figcaption></figure></section><section class="card"><h2>Timeline</h2><p>The longest phase was run at 19 s.</p><figure><img src="figures/timeline.png" alt="Gantt chart of run phases and activities" loading="lazy"><figcaption>Phase spans from the run's status history, and below them each tracked activity from its start event to its end event.</figcaption></figure></section><section class="card"><h2>Lessons recorded</h2><ul class="plain"><li>Trp-cage (20 residues) passed the frozen short-chain checks at pLDDT 78.4 and pTM 0.36.</li></ul></section><footer>Generated by labloop from run r-20261021-160518-c07b91.</footer></main></body></html>

@@ -22,7 +22,7 @@ if [ "$ONLY" != ndemo ]; then
   DEMO_TOUR=0 DEMO_WORKERS=1 DEMO_VIDEO_SCALE=1.5 \
     "$TOOLS/video-demo/scripts/demo" --project "$DEMO/video" --grep "viz-"
   DEMO_TOUR=0 DEMO_WORKERS=1 DEMO_VIDEO_SCALE=1.25 DEMO_BUILD=0 \
-    "$TOOLS/video-demo/scripts/demo" --project "$DEMO/video" --grep "task|run1|lesson|run2|reuse"
+    "$TOOLS/video-demo/scripts/demo" --project "$DEMO/video" --grep "task|run1|lesson|run2|report|reuse"
   python3 "$DEMO/compose.py" "$DEMO/video/demo-out/light" \
     "$TOOLS/recordly/public/wallpapers/farmvalley.jpg" "$OUT/labloop-mubit-demo.mp4"
 fi

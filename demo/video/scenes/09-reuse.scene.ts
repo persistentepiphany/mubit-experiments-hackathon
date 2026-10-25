@@ -2,7 +2,7 @@ import { scene } from 'video-demo/scene';
 
 import { LINES } from '../script.ts';
 import { TRP_CAGE } from '../seed/world.ts';
-import { lab, learned, scrollTo, step } from '../ui.ts';
+import { freezeStructures, lab, scrollTo } from '../ui.ts';
 
 const L = LINES.reuse;
 
@@ -22,17 +22,22 @@ scene('reuse', { title: 'Reuse', blurb: 'A different short protein uses the save
   await world.c('match');
   await actor.beat(400);
   await world.c('freeze');
-  await step(page, 'Match against skills').locator('.tag').waitFor();
+  const invoked = page.locator('.learned', { hasText: 'Skill invoked' });
+  await invoked.waitFor();
+  await scrollTo(actor, page, invoked, 210);
   await actor.settle();
-  await actor.spotlight(page.locator('.cols > div').first(), L[1], { scale: 1.3 });
+  await actor.spotlight(invoked, L[1], { scale: 1.6 });
   await world.c('run');
   await world.c('run2');
+  await page.locator('[data-mol] canvas').waitFor();
+  await freezeStructures(page);
   await world.c('grade');
   await world.c('learn');
   await world.c('done');
-  await learned(page).waitFor();
-  await scrollTo(actor, page, learned(page), 230);
+  const saved = page.locator('.learned', { hasText: 'A saved skill did this work' });
+  await saved.waitFor();
+  await scrollTo(actor, page, saved, 230);
   await actor.settle();
-  await actor.spotlight(learned(page), L[2], { scale: 1.6, stay: true });
+  await actor.spotlight(saved, L[2], { scale: 1.6, stay: true });
   await actor.unfocus();
 });

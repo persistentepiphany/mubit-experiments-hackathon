@@ -1,7 +1,7 @@
 import { scene } from 'video-demo/scene';
 
 import { LINES } from '../script.ts';
-import { activity, callout, clearCallouts, lab, learned, overGesture, scrollTo, sideCard, untilSaid } from '../ui.ts';
+import { activity, callout, clearCallouts, freezeStructures, lab, learned, overGesture, scrollTo, sideCard, untilSaid } from '../ui.ts';
 
 const L = LINES.run2;
 
@@ -30,6 +30,8 @@ scene('run2', { title: 'Second run', blurb: 'The lesson is recalled, and the run
   await actor.settle();
   await actor.spotlight(sideCard(page, 'Frozen checks'), L[2], { scale: 1.7 });
   await world.b('run2');
+  await page.locator('[data-mol] canvas').waitFor();
+  await freezeStructures(page);
   await world.b('grade');
   await world.b('learn');
   await world.b('done');
@@ -41,4 +43,7 @@ scene('run2', { title: 'Second run', blurb: 'The lesson is recalled, and the run
   await actor.say(L[4]);
   await clearCallouts(page);
   await actor.unfocus();
+  // The report opens in the next scene.
+  await scrollTo(actor, page, page.locator('h1.run'), 140);
+  await actor.hover(page.locator('a.btnlink', { hasText: 'Open report' }), 700);
 });

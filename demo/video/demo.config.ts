@@ -11,10 +11,16 @@ import { defineDemo } from 'video-demo/define';
  */
 
 const RUN_A = 'r-20261021-150212-5d8e3a';
+const RUN_B = 'r-20261021-152940-8b1f07';
 
 /** The website has no loaded flag: its heading renders after the data arrives. */
 const site = async (page: Page) => {
   await page.locator('#view h1').first().waitFor({ state: 'visible' });
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+};
+
+const report = async (page: Page) => {
+  await page.locator('section.card h2').first().waitFor({ state: 'visible' });
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 };
 
@@ -51,6 +57,7 @@ export default defineDemo({
     lesson: { path: `/#/runs/${RUN_A}`, ready: site },
     run2: { path: '/', ready: site },
     reuse: { path: '/', ready: site },
+    report: { path: `/runs/${RUN_B}/report`, ready: report },
     'viz-intro': { path: '/viz/intro.html', ready: explainer },
     'viz-mubit': { path: '/viz/mubit.html', ready: explainer },
     'viz-memory': { path: '/viz/memory.html', ready: explainer },
@@ -70,5 +77,5 @@ export default defineDemo({
     ],
   },
 
-  tour: ['viz-intro', 'viz-mubit', 'task', 'run1', 'lesson', 'viz-memory', 'run2', 'reuse', 'viz-outro'],
+  tour: ['viz-intro', 'viz-mubit', 'task', 'run1', 'lesson', 'viz-memory', 'run2', 'report', 'reuse', 'viz-outro'],
 });

@@ -74,7 +74,7 @@ segments:
         done:
           text:
             selector: ".cols"
-            has: "observed 0.494"
+            has: "Verdict FAIL"
           timeout: 30000
       - type: "scroll"
         target:

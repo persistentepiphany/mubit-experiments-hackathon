@@ -16,9 +16,12 @@ import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 
-import { PHASES_A, PHASES_C, RUN_A, RUN_B, RUN_C, TRP_CAGE, card, runA, runB, runC, runList, skills } from './video/seed/world.ts';
+import { PHASES_A, PHASES_C, RUN_A, RUN_B, RUN_C, TRP_CAGE, card, projects, runA, runB, runC, runList, skills } from './video/seed/world.ts';
 
 const ROOT = join(import.meta.dirname, '..');
+const SEED = join(import.meta.dirname, 'video', 'seed');
+const TYPES = { '.pdb': 'chemical/x-pdb', '.cif': 'chemical/x-cif', '.json': 'application/json',
+  '.png': 'image/png', '.txt': 'text/plain; charset=utf-8', '.pdf': 'application/pdf' };
 const PORT = Number(process.argv[2] ?? 8765);
 
 /** Seconds after submission at which each phase is reached. */
@@ -59,7 +62,14 @@ createServer(async (req, res) => {
 
   try {
     if (req.method === 'GET' && path === '/') {
-      return send(res, 200, await readFile(join(ROOT, 'labloop/web/index.html'), 'utf8'), 'text/html');
+      // The structure viewer's library from the copy setup.sh vendors, not the CDN.
+      const page = await readFile(join(ROOT, 'labloop/web/index.html'), 'utf8');
+      return send(res, 200, page.replace('https://cdn.jsdelivr.net/npm/3dmol@2.5.5/build/3Dmol-min.js', '/vendor/3Dmol-min.js'), 'text/html');
+    }
+    if (req.method === 'GET' && path === '/vendor/3Dmol-min.js') {
+      const body = await readFile(join(import.meta.dirname, '.tools', '3dmol', '3Dmol-min.js')).catch(() => null);
+      if (body) { res.writeHead(200, { 'content-type': 'application/javascript' }); return res.end(body); }
+      return send(res, 404, { detail: 'run demo/setup.sh to vendor 3Dmol' });
     }
     if (req.method === 'POST' && path === '/__reset') {
       submitted = { a: null, b: null, c: null };
@@ -72,6 +82,26 @@ createServer(async (req, res) => {
       return send(res, 202, { run_id: { a: RUN_A, b: RUN_B, c: RUN_C }[which], phase: 'queued' });
     }
     if (req.method === 'GET' && path === '/runs') return send(res, 200, { runs: runList(a, b, c) });
+    if (req.method === 'GET' && path === '/projects') return send(res, 200, { projects: projects(runList(a, b, c)) });
+    if (req.method === 'GET' && path.startsWith('/artifacts/')) {
+      const rel = decodeURIComponent(path.slice('/artifacts/'.length));
+      const type = TYPES[rel.slice(rel.lastIndexOf('.'))];
+      const body = !rel.includes('..') && type ? await readFile(join(SEED, 'artifacts', rel)).catch(() => null) : null;
+      if (body) { res.writeHead(200, { 'content-type': type }); return res.end(body); }
+      return send(res, 404, { detail: 'no such artifact' });
+    }
+    const report = path.match(/^\/runs\/(r-[0-9a-f-]+)\/report(?:\/figures\/([\w.-]+\.png))?$/);
+    if (req.method === 'GET' && report) {
+      const [, id, figure] = report;
+      if (figure) {
+        const body = await readFile(join(SEED, 'reports', id, 'figures', figure)).catch(() => null);
+        if (body) { res.writeHead(200, { 'content-type': 'image/png' }); return res.end(body); }
+      } else {
+        const page = await readFile(join(SEED, 'reports', id, 'report.html'), 'utf8').catch(() => null);
+        if (page) return send(res, 200, page.replaceAll('src="figures/', `src="/runs/${id}/report/figures/`), 'text/html; charset=utf-8');
+      }
+      return send(res, 404, { detail: 'no report for this run' });
+    }
     if (req.method === 'GET' && path.startsWith('/runs/')) {
       const id = path.split('/')[2];
       const now = new Date();

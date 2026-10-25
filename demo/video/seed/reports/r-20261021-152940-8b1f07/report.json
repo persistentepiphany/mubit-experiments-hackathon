@@ -1,0 +1,166 @@
+{
+  "checks": [
+    {
+      "criterion": "\u2265 70",
+      "id": "confident_fold",
+      "metric": "fold.scores.mean_plddt",
+      "observed": 89.7,
+      "status": "PASS"
+    },
+    {
+      "criterion": "\u2265 0.300",
+      "id": "global_fold",
+      "metric": "fold.scores.ptm",
+      "observed": 0.494,
+      "status": "PASS"
+    }
+  ],
+  "counts": {
+    "FAIL": 0,
+    "PASS": 2,
+    "UNVERIFIABLE": 0
+  },
+  "decisive": [
+    "confident_fold",
+    "global_fold"
+  ],
+  "duration_s": 139.0,
+  "figures": [
+    "figures/confidence_fold.png",
+    "figures/metrics.png",
+    "figures/pipeline.png",
+    "figures/structure_fold.png",
+    "figures/timeline.png"
+  ],
+  "finished": true,
+  "inputs": {
+    "sequence": "GSHMKTAYIAKQRQISFVKSHFSRQLEERL"
+  },
+  "lessons": [
+    "A pTM floor of 0.3 suits chains under 50 residues: this 30-residue fold passed at pTM 0.494 with pLDDT 89.7."
+  ],
+  "origin": {
+    "kind": "planned"
+  },
+  "origin_text": "New pipeline",
+  "phase": "done",
+  "report_version": 1,
+  "research": {
+    "errors": [],
+    "n_answers": 2,
+    "n_guidance": 2,
+    "n_numbers": 1,
+    "n_papers": 3,
+    "shape": "paperqa"
+  },
+  "reviewer_summary": "With the pTM floor at 0.3 for a 30-residue chain, the same fold passed both frozen checks (pLDDT 89.7, pTM 0.494).",
+  "run_id": "r-20261021-152940-8b1f07",
+  "section_errors": [],
+  "sections": [
+    "header",
+    "outcome",
+    "choice",
+    "metrics",
+    "structure",
+    "study",
+    "timeline",
+    "lessons"
+  ],
+  "skill_result": {
+    "action": "created",
+    "skill": "esmfold_short_chain_fold",
+    "standing": "draft",
+    "version": 1
+  },
+  "started_at": "2026-10-21T15:29:40Z",
+  "steps": [
+    {
+      "id": "fold",
+      "tool": "esmfold"
+    }
+  ],
+  "structures": [
+    {
+      "chains": [
+        {
+          "id": "A",
+          "n_residues": 30
+        }
+      ],
+      "confidence": "plddt",
+      "fraction_ge_70": 0.9333,
+      "fraction_ge_90": 0.8,
+      "mean_confidence": 89.7,
+      "n_residues": 30,
+      "path": "r-20261021-152940-8b1f07/fold/model.pdb",
+      "step_id": "fold",
+      "tool": "esmfold"
+    }
+  ],
+  "task": "Predict the 3D structure of this single protein chain and report whether the fold is confident.",
+  "timeline": {
+    "activities": [
+      {
+        "key": "match",
+        "seconds": 4.0,
+        "state": "done"
+      },
+      {
+        "key": "corpus",
+        "seconds": 59.0,
+        "state": "done"
+      },
+      {
+        "key": "planner",
+        "seconds": 39.0,
+        "state": "done"
+      },
+      {
+        "key": "step:fold",
+        "seconds": 20.0,
+        "state": "done"
+      },
+      {
+        "key": "reviewer",
+        "seconds": 7.0,
+        "state": "done"
+      },
+      {
+        "key": "report",
+        "seconds": 0.0,
+        "state": "done"
+      }
+    ],
+    "phases": [
+      {
+        "phase": "match",
+        "seconds": 3.0
+      },
+      {
+        "phase": "research",
+        "seconds": 59.0
+      },
+      {
+        "phase": "plan",
+        "seconds": 39.0
+      },
+      {
+        "phase": "freeze",
+        "seconds": 1.0
+      },
+      {
+        "phase": "run",
+        "seconds": 21.0
+      },
+      {
+        "phase": "grade",
+        "seconds": 1.0
+      },
+      {
+        "phase": "learn",
+        "seconds": 7.0
+      }
+    ]
+  },
+  "verdict": "PASS"
+}

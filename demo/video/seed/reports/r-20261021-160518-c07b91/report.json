@@ -1,0 +1,151 @@
+{
+  "checks": [
+    {
+      "criterion": "\u2265 70",
+      "id": "confident_fold",
+      "metric": "fold.scores.mean_plddt",
+      "observed": 78.4,
+      "status": "PASS"
+    },
+    {
+      "criterion": "\u2265 0.300",
+      "id": "global_fold",
+      "metric": "fold.scores.ptm",
+      "observed": 0.36,
+      "status": "PASS"
+    }
+  ],
+  "counts": {
+    "FAIL": 0,
+    "PASS": 2,
+    "UNVERIFIABLE": 0
+  },
+  "decisive": [
+    "confident_fold",
+    "global_fold"
+  ],
+  "duration_s": 36.0,
+  "figures": [
+    "figures/confidence_fold.png",
+    "figures/metrics.png",
+    "figures/pipeline.png",
+    "figures/structure_fold.png",
+    "figures/timeline.png"
+  ],
+  "finished": true,
+  "inputs": {
+    "sequence": "NLYIQWLKDGGPSSGRPPPS"
+  },
+  "lessons": [
+    "Trp-cage (20 residues) passed the frozen short-chain checks at pLDDT 78.4 and pTM 0.36."
+  ],
+  "origin": {
+    "kind": "skill",
+    "skill": "esmfold_short_chain_fold",
+    "version": 1
+  },
+  "origin_text": "Skill esmfold_short_chain_fold v1",
+  "phase": "done",
+  "report_version": 1,
+  "reviewer_summary": "The saved skill folded Trp-cage at pLDDT 78.4 and pTM 0.36, and both frozen checks passed.",
+  "run_id": "r-20261021-160518-c07b91",
+  "section_errors": [],
+  "sections": [
+    "header",
+    "outcome",
+    "choice",
+    "metrics",
+    "structure",
+    "timeline",
+    "lessons"
+  ],
+  "skill_invoked": {
+    "input_mapping": {
+      "sequence": {
+        "from_input": "sequence"
+      }
+    },
+    "matched_applies_when": "the task asks for the structure of one protein chain of under 50 residues given its sequence",
+    "name": "esmfold_short_chain_fold",
+    "version": 1
+  },
+  "skill_result": {
+    "action": "evidence_appended",
+    "skill": "esmfold_short_chain_fold",
+    "standing": "validated",
+    "version": 2
+  },
+  "started_at": "2026-10-21T16:05:18Z",
+  "steps": [
+    {
+      "id": "fold",
+      "tool": "esmfold"
+    }
+  ],
+  "structures": [
+    {
+      "chains": [
+        {
+          "id": "A",
+          "n_residues": 20
+        }
+      ],
+      "confidence": "plddt",
+      "fraction_ge_70": 0.9,
+      "fraction_ge_90": 0.15,
+      "mean_confidence": 78.4,
+      "n_residues": 20,
+      "path": "r-20261021-160518-c07b91/fold/model.pdb",
+      "step_id": "fold",
+      "tool": "esmfold"
+    }
+  ],
+  "task": "Predict the 3D structure of this single protein chain and report whether the fold is confident.",
+  "timeline": {
+    "activities": [
+      {
+        "key": "match",
+        "seconds": 4.0,
+        "state": "done"
+      },
+      {
+        "key": "step:fold",
+        "seconds": 18.0,
+        "state": "done"
+      },
+      {
+        "key": "reviewer",
+        "seconds": 6.0,
+        "state": "done"
+      },
+      {
+        "key": "report",
+        "seconds": 1.0,
+        "state": "done"
+      }
+    ],
+    "phases": [
+      {
+        "phase": "match",
+        "seconds": 3.0
+      },
+      {
+        "phase": "freeze",
+        "seconds": 1.0
+      },
+      {
+        "phase": "run",
+        "seconds": 19.0
+      },
+      {
+        "phase": "grade",
+        "seconds": 1.0
+      },
+      {
+        "phase": "learn",
+        "seconds": 6.0
+      }
+    ]
+  },
+  "verdict": "PASS"
+}

@@ -134,3 +134,28 @@ export async function scrollTo(actor: Actor, page: Page, target: Locator, top = 
   );
   if (Math.abs(delta) > 4) await actor.scroll(page.locator('main'), delta);
 }
+
+/**
+ * Swaps each live 3D structure viewer for a still image of its current view.
+ *
+ * Headless Chromium renders WebGL in software, and while a run is live the
+ * website repaints every frame (its pulsing status dots), so a live viewer
+ * makes every captured frame expensive enough to starve the page. The still
+ * is the viewer's own render, so the film looks the same.
+ */
+export async function freezeStructures(page: Page) {
+  await page.evaluate(() => {
+    // The website keeps its viewers in a top-level `const S`, which is not a
+    // property of the global object; an indirect eval runs in global scope.
+    type Viewers = { viewers: Record<string, { el: HTMLElement; v: { pngURI: () => string } }> };
+    const state = (0, eval)('typeof S === "undefined" ? undefined : S') as Viewers | undefined;
+    for (const { el, v } of Object.values(state?.viewers ?? {})) {
+      const canvas = el.querySelector('canvas');
+      if (!canvas) continue;
+      const img = document.createElement('img');
+      img.src = v.pngURI();
+      img.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block';
+      canvas.replaceWith(img);
+    }
+  });
+}

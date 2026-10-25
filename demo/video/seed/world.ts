@@ -42,6 +42,9 @@ export const TRP_CAGE = 'NLYIQWLKDGGPSSGRPPPS';
 const TASK_AB = { description: FOLD_DESCRIPTION, inputs: { sequence: PEPTIDE } };
 const TASK_C = { description: FOLD_DESCRIPTION, inputs: { sequence: TRP_CAGE } };
 
+/** What reporting.build_report writes for a run like these; seed/make_reports.py builds them. */
+const REPORT_FILES = ['figures/confidence_fold.png', 'figures/metrics.png', 'figures/pipeline.png', 'figures/structure_fold.png', 'figures/timeline.png', 'report.html', 'report.json'];
+
 const LESSON_A =
   'A pTM floor of 0.5 is too strict for a 30-residue chain. Short chains score low pTM even when pLDDT is high, so use about 0.3 below 50 residues.';
 const LESSON_B = 'A pTM floor of 0.3 suits chains under 50 residues: this 30-residue fold passed at pTM 0.494 with pLDDT 89.7.';
@@ -60,10 +63,11 @@ const CHECKS_B = [
   { id: 'global_fold', metric: 'fold.scores.ptm', op: '>=', value: 0.3, rationale: 'lowered for a chain under 50 residues, following a recalled lesson' },
 ];
 
+/** Real papers; seed/fetch_papers.py freezes their abstracts as the run's corpus. */
 const PAPERS = [
-  { id: '36927031', doi: '10.1126/science.ade2574', title: 'Evolutionary-scale prediction of atomic-level protein structure with a language model', year: '2023', citations: 2140, text_source: 'full_text', full_text: true },
-  { id: '34265844', doi: '10.1038/s41586-021-03819-2', title: 'Highly accurate protein structure prediction with AlphaFold', year: '2021', citations: 31800, text_source: 'full_text', full_text: true },
-  { id: '38001234', doi: '10.1093/bioinformatics/btad702', title: 'Benchmarking single-sequence structure predictors on short peptides', year: '2023', citations: 46, text_source: 'abstract', full_text: false },
+  { id: '36927031', doi: '10.1126/science.ade2574', title: 'Evolutionary-scale prediction of atomic-level protein structure with a language model', year: '2023', citations: 4757, text_source: 'abstract', full_text: false, file: 'lin2023.txt' },
+  { id: '34265844', pmcid: 'PMC8371605', doi: '10.1038/s41586-021-03819-2', title: 'Highly accurate protein structure prediction with AlphaFold', year: '2021', citations: 37040, text_source: 'abstract', full_text: false, file: 'jumper2021.txt' },
+  { id: '20164152', doi: '10.1093/bioinformatics/btq066', title: 'How significant is a protein structure similarity with TM-score = 0.5?', year: '2010', citations: 960, text_source: 'abstract', full_text: false, file: 'xu2010.txt' },
 ];
 
 const SKILL_META = {
@@ -92,22 +96,40 @@ const PLAN_C = { ...PLAN_B, origin: { kind: 'skill', skill: SKILL, version: 1 },
 
 const DIGEST = { a: sha256(PLAN_A), b: sha256(PLAN_B), c: sha256(PLAN_C) };
 
-function research(lessons: number) {
+function research(id: string, lessons: number) {
   return {
     queries: ['"ESMFold" AND pTM AND "short peptide"', '"single sequence" structure prediction confidence peptides'],
     query_error: null,
     limits: { max_queries: 2, page_size: 25, max_docs: 6 },
     papers: PAPERS,
-    corpus: { scores: { n_documents: 6, n_full_text: 3, searched: 41 } },
+    corpus: { path: `${id}/research_corpus`, scores: { n_documents: 3, n_full_text: 0, searched: 41 } },
     paperqa: {
-      documents: 9,
+      documents: 3,
       failed: [],
       answers: [
-        { question: 'Which tool and settings?', answer: 'ESMFold on the single sequence.', contexts: [{ citation: 'Lin 2023' }, { citation: 'Jumper 2021' }] },
-        { question: 'What confidence counts as good?', answer: 'pLDDT above 70; pTM is lower for short chains.', contexts: [{ citation: 'Jumper 2021' }, { citation: 'Short peptides 2023' }] },
+        {
+          question: 'Which tool and settings fit a single-chain fold from sequence alone?',
+          answer: 'ESMFold predicts structure directly from one sequence, without a multiple sequence alignment.',
+          contexts: [{ citation: 'Lin2023 chunk 1' }],
+        },
+        {
+          question: 'What confidence values mark a trustworthy fold?',
+          answer: 'pTM estimates the TM-score of the prediction, and a TM-score of 0.5 is the usual line for two structures sharing a fold. The papers set no pTM floor for very short chains.',
+          contexts: [{ citation: 'Jumper2021 chunk 3' }, { citation: 'Xu2010 chunk 1' }],
+        },
       ],
     },
-    extraction: { reported_numbers: [{}, {}, {}, {}], guidance: [{}, {}, {}] },
+    extraction: {
+      summary:
+        'ESMFold folds a single sequence without an alignment. pTM estimates the TM-score of the predicted structure, and a TM-score of 0.5 is the usual line for a correct fold. None of the papers sets a pTM floor for chains under 50 residues.',
+      reported_numbers: [
+        { quantity: 'TM-score at which two structures usually share a fold', value: '0.5', unit: '', context: 'fold-level similarity threshold', source: 'Xu and Zhang 2010, Bioinformatics' },
+      ],
+      guidance: [
+        { statement: 'ESMFold needs only the sequence, so no alignment step is required.', source: 'Lin et al. 2023, Science' },
+        { statement: 'Read pTM as a predicted TM-score of the whole fold.', source: 'Jumper et al. 2021, Nature' },
+      ],
+    },
     errors: [],
     advisory_lessons: lessons,
   };
@@ -144,8 +166,8 @@ function eventsFor(kind: 'a' | 'b' | 'c'): [string, Ev][] {
       ['research', { kind: 'done', key: 'match', phase: 'match', message: 'No saved skill fits: the Boltz-2 skill needs two chains, and the PDB skill only reads deposited entries.' }],
       ['research', { kind: 'info', phase: 'research', message: 'Researcher wrote 2 Europe PMC queries: "ESMFold" AND pTM AND "short peptide" | "single sequence" structure prediction confidence peptides' }],
       ['research', { kind: 'start', key: 'corpus', phase: 'research', message: 'Building the corpus on Modal: Europe PMC (25 per query), OpenAlex citations, full text, frozen manifest' }],
-      ['plan', { kind: 'done', key: 'corpus', phase: 'research', message: 'Corpus frozen: 6 papers (3 full text) chosen from 41 found' }],
-      ['plan', { kind: 'info', phase: 'research', message: 'PaperQA2 read 9 papers and answered 2 questions citing 3 papers' }],
+      ['plan', { kind: 'done', key: 'corpus', phase: 'research', message: 'Corpus frozen: 3 papers (0 full text) chosen from 41 found' }],
+      ['plan', { kind: 'info', phase: 'research', message: 'PaperQA2 read 3 papers and answered 2 questions citing 3 papers' }],
       ['plan', { kind: 'start', key: 'planner', phase: 'plan', message: `Planner composing a pipeline from 6 deployed tools, 6 tool knowledge cards and ${lessons} recalled lesson${lessons === 1 ? '' : 's'}` }],
       ['freeze', { kind: 'done', key: 'planner', phase: 'plan', message: 'Planner drafted esmfold with 2 checks (0 against published references)' }],
     );
@@ -161,9 +183,14 @@ function eventsFor(kind: 'a' | 'b' | 'c'): [string, Ev][] {
     ['learn', { kind: 'start', key: 'reviewer', phase: 'learn', message: 'Reviewer writing lessons from the graded run' }],
     ['done', { kind: 'done', key: 'reviewer', phase: 'learn', message: 'Reviewer recorded 1 lesson' }],
   );
-  if (kind === 'b') out.push(['done', { kind: 'info', phase: 'learn', message: `Skill ${SKILL} created, standing draft` }]);
+  if (kind === 'b') {
+    out.push(['done', { kind: 'info', phase: 'learn', message: `Skill ${SKILL} created, standing draft` }]);
+    out.push(['done', { kind: 'info', phase: 'learn', message: 'Skill mirror: mirrored to Mubit' }]);
+  }
   if (kind === 'c') out.push(['done', { kind: 'info', phase: 'learn', message: `Skill ${SKILL} given this run as evidence, standing validated` }]);
   out.push(['done', { kind: 'info', message: `Run finished: ${pass ? 'PASS' : 'FAIL'}` }]);
+  out.push(['done', { kind: 'start', key: 'report', phase: 'learn', message: 'Writing the run report with figures' }]);
+  out.push(['done', { kind: 'done', key: 'report', phase: 'learn', message: 'Report written with 5 figures' }]);
   return out;
 }
 
@@ -224,18 +251,18 @@ function build(kind: 'a' | 'b' | 'c', p: string, now?: Date) {
       phase: statusPhase(p),
       history,
       ...(reached('run') ? { plan_digest: DIGEST[kind], inputs_digest: sha256(inputs), origin: plan.origin } : {}),
-      ...(done ? { verdict: pass ? 'PASS' : 'FAIL', skill, lessons: [`mem_${kind}1`], lesson_texts: [lessonText], summary } : {}),
+      ...(done ? { verdict: pass ? 'PASS' : 'FAIL', skill, lessons: [`mem_${kind}1`], lesson_texts: [lessonText], summary, report: { files: REPORT_FILES } } : {}),
     },
     task,
     match:
       kind === 'c'
         ? reached('freeze')
-          ? { candidates: ['boltz2_heterodimer_interface', 'pdb_chain_sequences', SKILL], lessons: ['mem_a1', 'mem_b1'], decision: 'reuse', skill: SKILL, version: 1, matched_applies_when: APPLIES, input_mapping: { sequence: { from_input: 'sequence' } }, reason: 'one chain of 20 residues' }
+          ? { candidates: ['boltz2_heterodimer_interface', 'pdb_chain_sequences', SKILL], lessons: ['mem_a1', 'mem_b1'], decision: 'reuse', skill: SKILL, version: 1, via: 'matched by the applicability role', model: 'mubit:claude-haiku-5-5', matched_applies_when: APPLIES, input_mapping: { sequence: { from_input: 'sequence' } }, reason: 'One chain of 20 residues, under the 50-residue limit, and no not_for condition applies.' }
           : null
         : reached('research')
           ? { candidates: ['boltz2_heterodimer_interface', 'pdb_chain_sequences'], lessons: kind === 'b' ? ['mem_a1'] : [], decision: 'plan', skill: null, reason: 'Neither saved skill fits: the Boltz-2 skill needs two chains, and the PDB skill only reads deposited entries.' }
           : null,
-    research: kind !== 'c' && reached('plan') ? research(kind === 'b' ? 1 : 0) : null,
+    research: kind !== 'c' && reached('plan') ? research(id, kind === 'b' ? 1 : 0) : null,
     plan: reached('freeze') ? plan : null,
     plan_sha256: reached('run') ? DIGEST[kind] : null,
     inputs: reached('run') ? { inputs, inputs_digest: sha256(inputs) } : null,
@@ -340,6 +367,25 @@ const EARLIER = [
   { run_id: 'r-20261020-101422-7c1e09', description: 'Co-fold PD-1 with PD-L1 and report interface confidence', verdict: 'PASS', origin: { kind: 'planned' }, started_at: '2026-10-20T10:14:22Z' },
 ];
 
+/** GET /projects, grouped as labloop/api.py groups them. */
+export function projects(runs: ReturnType<typeof runList>) {
+  const grouped = new Map<string, Record<string, unknown> & { recent: unknown[]; skills_created: string[]; skills_used: string[] }>();
+  for (const r of [...runs].reverse()) {
+    const name = (r as { project?: string }).project ?? 'General';
+    const g = grouped.get(name) ?? { name, runs: 0, PASS: 0, FAIL: 0, INCONCLUSIVE: 0, errors: 0, running: 0, skills_created: [], skills_used: [], latest: null, recent: [] };
+    g.runs = (g.runs as number) + 1;
+    if (r.phase === 'done' && typeof r.verdict === 'string') g[r.verdict] = (g[r.verdict] as number) + 1;
+    else g.running = (g.running as number) + 1;
+    const sk = r.skill as { action?: string; skill?: string } | null;
+    if (sk?.action === 'created') g.skills_created.push(sk.skill!);
+    else if (sk?.skill && !g.skills_used.includes(sk.skill)) g.skills_used.push(sk.skill);
+    g.latest = r.started_at ?? g.latest;
+    g.recent = [{ run_id: r.run_id, description: r.description, phase: r.phase, verdict: r.verdict }, ...g.recent].slice(0, 6);
+    grouped.set(name, g);
+  }
+  return [...grouped.values()];
+}
+
 /** GET /runs, newest first. */
 export function runList(a: PhaseA, b: PhaseA, c: PhaseC) {
   const live = [runC(c), runB(b), runA(a)]
@@ -349,6 +395,7 @@ export function runList(a: PhaseA, b: PhaseA, c: PhaseC) {
       const events = ('events' in doc ? doc.events : []) as { at: string }[];
       return {
         run_id: doc.run_id,
+        project: 'Short chains',
         description: FOLD_DESCRIPTION,
         phase: 'phase' in doc ? doc.phase : status.phase,
         verdict: status.verdict ?? null,
@@ -359,5 +406,5 @@ export function runList(a: PhaseA, b: PhaseA, c: PhaseC) {
         started_at: ((status.history as { at: string }[] | undefined) ?? [])[0]?.at ?? null,
       };
     });
-  return [...live, ...EARLIER.map((r) => ({ ...r, phase: 'done', skill: null, activity: null, in_flight: [] }))];
+  return [...live, ...EARLIER.map((r) => ({ ...r, project: 'General', phase: 'done', skill: null, activity: null, in_flight: [] }))];
 }

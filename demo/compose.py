@@ -21,7 +21,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
 
 W, H = 1920, 1080
-TOUR = ["viz-intro", "viz-mubit", "task", "run1", "lesson", "viz-memory", "run2", "reuse", "viz-outro"]
+TOUR = ["viz-intro", "viz-mubit", "task", "run1", "lesson", "viz-memory", "run2", "report", "reuse", "viz-outro"]
 FADE = 0.7          # seconds of crossfade between clips
 GAP = 0.08          # the least silence allowed between two lines
 LEAD = 0.35         # silence kept between a transition and the nearest line

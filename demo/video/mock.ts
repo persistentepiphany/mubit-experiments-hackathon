@@ -6,13 +6,13 @@ import type { Page, Route } from '@playwright/test';
 import type { MockContext } from 'video-demo/define';
 
 import type { PhaseA, PhaseC } from './seed/world.ts';
-import { RUN_A, RUN_B, RUN_C, TRP_CAGE, card, runA, runB, runC, runList, skills } from './seed/world.ts';
+import { RUN_A, RUN_B, RUN_C, TRP_CAGE, card, projects, runA, runB, runC, runList, skills } from './seed/world.ts';
 
 /**
  * Every labloop API request the website makes, answered in this process.
  *
  * The website calls the API on its own origin (`/tasks`, `/runs`, `/skills`,
- * `/knowledge`, `/jobs`), so the handlers match those paths and let the page
+ * `/knowledge`, `/jobs`, `/projects`, `/artifacts`), so the handlers match those paths and let the page
  * and the explainer pages under /viz through. The world is three runs whose
  * progress the scene drives: `lab.a(...)`, `lab.b(...)` and `lab.c(...)` move
  * a run to a phase at the moment the narration reaches it.
@@ -34,7 +34,15 @@ const START: Record<string, State> = {
   reuse: { a: 'done', b: 'done', c: 'none' },
 };
 
-const FONTS = join(import.meta.dirname, 'seed', 'fonts');
+const SEED = join(import.meta.dirname, 'seed');
+const FONTS = join(SEED, 'fonts');
+const THREEDMOL = join(import.meta.dirname, '..', '.tools', '3dmol', '3Dmol-min.js');
+
+/** labloop/api.py serves only these artifact types. */
+const ARTIFACT_TYPES: Record<string, string> = {
+  '.pdb': 'chemical/x-pdb', '.cif': 'chemical/x-cif', '.json': 'application/json',
+  '.png': 'image/png', '.txt': 'text/plain; charset=utf-8', '.pdf': 'application/pdf',
+};
 
 function json(route: Route, body: unknown, status = 200): Promise<void> {
   return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -52,6 +60,33 @@ export async function mock(page: Page, ctx: MockContext): Promise<Lab> {
   await page.route('https://fonts.gstatic.com/demo/*', async (route) =>
     route.fulfill({ contentType: 'font/woff2', body: await readFile(join(FONTS, tail(route))) })
   );
+
+  // The structure viewer's library, vendored by setup.sh; the CDN is the fallback.
+  await page.route('https://cdn.jsdelivr.net/npm/3dmol@2.5.5/**', async (route) => {
+    const body = await readFile(THREEDMOL).catch(() => null);
+    return body ? route.fulfill({ contentType: 'application/javascript', body }) : route.continue();
+  });
+
+  await page.route(/\/artifacts\/.+$/, async (route) => {
+    const rel = decodeURIComponent(new URL(route.request().url()).pathname.replace(/^\/artifacts\//, ''));
+    const type = ARTIFACT_TYPES[rel.slice(rel.lastIndexOf('.'))];
+    const body = !rel.includes('..') && type ? await readFile(join(SEED, 'artifacts', rel)).catch(() => null) : null;
+    return body ? route.fulfill({ contentType: type, body }) : json(route, { detail: 'no such artifact' }, 404);
+  });
+
+  // The run report, as GET /runs/{id}/report serves it, figures rewritten to their route.
+  await page.route(/\/runs\/r-[0-9a-f-]+\/report$/, async (route) => {
+    const id = new URL(route.request().url()).pathname.split('/')[2]!;
+    const html = await readFile(join(SEED, 'reports', id, 'report.html'), 'utf8').catch(() => null);
+    return html
+      ? route.fulfill({ contentType: 'text/html; charset=utf-8', body: html.replaceAll('src="figures/', `src="/runs/${id}/report/figures/`) })
+      : json(route, { detail: 'no report for this run' }, 404);
+  });
+  await page.route(/\/runs\/r-[0-9a-f-]+\/report\/figures\/[\w.-]+\.png$/, async (route) => {
+    const [, , id, , , name] = new URL(route.request().url()).pathname.split('/');
+    const body = await readFile(join(SEED, 'reports', id!, 'figures', name!)).catch(() => null);
+    return body ? route.fulfill({ contentType: 'image/png', body }) : json(route, { detail: 'no such figure' }, 404);
+  });
 
   await page.route(/\/tasks$/, (route) => {
     const body = route.request().postDataJSON() as { inputs?: { sequence?: string } };
@@ -81,9 +116,10 @@ export async function mock(page: Page, ctx: MockContext): Promise<Lab> {
 
   await page.route(/\/skills\/[a-z0-9_]+$/, (route) => {
     const skill = skills(state.b, state.c).find((s) => s.name === tail(route));
-    return skill ? json(route, { card: card(skill), skill }) : json(route, { detail: 'unknown skill' }, 404);
+    return skill ? json(route, { card: card(skill), skill, consultations: [] }) : json(route, { detail: 'unknown skill' }, 404);
   });
 
+  await page.route(/\/projects$/, (route) => json(route, { projects: projects(runList(state.a, state.b, state.c)) }));
   await page.route(/\/knowledge$/, (route) => json(route, { tools: [] }));
   await page.route(/\/jobs$/, (route) => json(route, { jobs: [] }));
 

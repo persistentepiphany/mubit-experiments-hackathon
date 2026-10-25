@@ -50,6 +50,19 @@ PW="${DEMO_PLAYWRIGHT:-1.63.0}"
 
 npx --yes "playwright@$PW" install chromium
 
+# The structure viewer's library, which the website loads from a CDN; the
+# mocks serve this copy instead.
+mkdir -p "$TOOLS/3dmol"
+(
+  cd "$TOOLS/3dmol"
+  npm pack --silent 3dmol@2.5.5 >/dev/null
+  tar -xzf 3dmol-2.5.5.tgz package/build/3Dmol-min.js
+  mv package/build/3Dmol-min.js . && rm -rf package 3dmol-2.5.5.tgz
+)
+
+# The three papers the mocked research step freezes: titles and abstracts from Europe PMC.
+python3 "$DEMO/video/seed/fetch_papers.py" "$DEMO/video/seed/artifacts"
+
 # The workspace links back to the engine and to this repository.
 node "$TOOLS/video-demo/scripts/scaffold.mjs" "$DEMO/.." --project "$DEMO/video" >/dev/null
 printf '\nsetup: done. Next: demo/record.sh\n'
