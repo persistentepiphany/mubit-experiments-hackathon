@@ -170,7 +170,10 @@ class AnthropicModels:
             kwargs["output_config"] = {"effort": effort}
             max_tokens = max(max_tokens, 16000)  # thinking at higher effort shares this budget with the answer
         if provider == "zai":
-            max_tokens = max(max_tokens, 32000)  # GLM reasons before answering and shares this budget with the answer
+            # GLM always reasons and cannot turn it off; capping the reasoning leaves room for the answer.
+            max_tokens = max(max_tokens, 32000)
+            kwargs["thinking"] = {"type": "enabled",
+                                  "budget_tokens": int(os.environ.get("LABLOOP_ZAI_THINKING_BUDGET", "12000"))}
         messages = self._client(provider).messages
         if provider != "zai" and model in FALLBACK_MODELS:
             messages = self._client(provider).beta.messages
