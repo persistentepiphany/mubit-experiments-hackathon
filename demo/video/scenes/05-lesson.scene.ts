@@ -1,0 +1,17 @@
+import { scene } from 'video-demo/scene';
+
+import { LINES } from '../script.ts';
+import { callout, clearCallouts, scrollTo, sideCard } from '../ui.ts';
+
+const L = LINES.lesson;
+
+scene('lesson', { title: 'The lesson', blurb: 'The reviewer explains the failure.', entry: 'lesson' }, async ({ actor, page }) => {
+  await actor.beat(500);
+  await scrollTo(actor, page, sideCard(page, 'Summary'), 170);
+  await actor.settle();
+  await actor.spotlight(sideCard(page, 'Summary'), L[0], { scale: 1.45, stay: true });
+  await callout(page, sideCard(page, 'Summary'), 'Mubit memory · remember()', 'above');
+  await actor.say(L[1]);
+  await clearCallouts(page);
+  await actor.unfocus();
+});

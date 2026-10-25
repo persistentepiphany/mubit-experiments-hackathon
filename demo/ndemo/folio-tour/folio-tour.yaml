@@ -3,8 +3,8 @@
 # the narration locally first, so no TTS key is needed. ndemo writes each
 # segment's audioDuration back into this file when it renders.
 titleCard:
-  title: "labloop · Folio"
-  subtitle: "Learn a reusable skill from doing the work"
+  title: "labloop × Mubit"
+  subtitle: "An AI lab that learns from each run"
   duration: 2500
 app:
   url: "http://127.0.0.1:8765/"
@@ -19,14 +19,15 @@ app:
 tts:
   provider: "openai"
   voice: "af_heart"
-  speed: 1
+  speed: 1.1
 recording:
   outputDir: "."
   fps: 30
 segments:
   - id: "intro"
-    narration: "This is Folio, the front end for labloop. You describe a science task, and it learns a reusable skill from doing the work."
-    intent: "Show the home page: composer, templates and saved skills."
+    narration: "This is lab loop, our project for the Mubit hackathon. It's an AI lab for protein experiments, and Mubit is what lets it learn from each run."
+    intent: "Show the home page."
+    timing: "parallel"
     actions:
       - type: "hover"
         target:
@@ -36,33 +37,19 @@ segments:
       - type: "hover"
         target:
           selector: ".grid"
+  - id: "first-run"
+    narration: "We ask it to fold a thirty residue protein chain. Mubit memory has no lessons for this yet, so it plans from scratch."
+    intent: "Pick the fold template and run it."
     timing: "parallel"
-    audioDuration: 7584
-    videoDuration: 7586
-  - id: "template"
-    narration: "Let's start from a template, and fold human lysozyme from its UniProt entry."
-    intent: "Pick the UniProt template and enter accession P61626."
     actions:
       - type: "click"
         target:
-          selector: "[data-tpl='uniprot']"
+          selector: "[data-tpl='fold']"
         done:
-          visible: "[data-param='accession']"
+          visible: "[data-param='sequence']"
       - type: "scroll"
         target:
           selector: "#runTpl"
-      - type: "type"
-        target:
-          selector: "[data-param='accession']"
-        text: "P61626"
-        delay: 90
-    timing: "parallel"
-    audioDuration: 4536
-    videoDuration: 4537
-  - id: "submit"
-    narration: "First it checks the saved skills. None fits, so it goes to the literature."
-    intent: "Run the template and watch match and research complete."
-    actions:
       - type: "click"
         target:
           selector: "#runTpl"
@@ -76,12 +63,10 @@ segments:
             selector: ".cols"
             has: "papers frozen"
           timeout: 20000
+  - id: "fail"
+    narration: "ESMFold returns a pTM of zero point four nine four, under the zero point five it set for itself, so the run fails."
+    intent: "The run fails its pTM check."
     timing: "parallel"
-    audioDuration: 4464
-    videoDuration: 8635
-  - id: "plan"
-    narration: "Then it builds a pipeline from tools on Modal, writes its checks up front, and freezes the plan under a digest."
-    intent: "Plan and freeze complete; frozen checks appear."
     actions:
       - type: "hover"
         target:
@@ -89,14 +74,54 @@ segments:
         done:
           text:
             selector: ".cols"
-            has: "before any step ran"
-          timeout: 20000
+            has: "observed 0.494"
+          timeout: 30000
+      - type: "scroll"
+        target:
+          selector: ".side .card:nth-child(3)"
+  - id: "lesson"
+    narration: "The reviewer writes a lesson: that floor is too strict for a chain this short. The lesson goes into Mubit memory."
+    intent: "Show the summary and the lesson."
     timing: "parallel"
-    audioDuration: 6696
-    videoDuration: 6697
-  - id: "grade"
-    narration: "All three checks pass, so the pipeline is saved as a new skill."
-    intent: "The run finishes and the learned box appears."
+    actions:
+      - type: "hover"
+        target:
+          selector: "h1.run"
+        done:
+          visible: ".side .card:nth-child(4)"
+          timeout: 30000
+      - type: "scroll"
+        target:
+          selector: ".side .card:nth-child(4)"
+      - type: "wait"
+        duration: 1500
+  - id: "second-run"
+    narration: "We run the same task again. Mubit recalls the lesson, and the planner sets the floor at zero point three."
+    intent: "Run the same template a second time."
+    timing: "parallel"
+    actions:
+      - type: "click"
+        target:
+          selector: "[data-nav='home']"
+        done:
+          visible: "[data-tpl='fold']"
+      - type: "click"
+        target:
+          selector: "[data-tpl='fold']"
+        done:
+          visible: "[data-param='sequence']"
+      - type: "scroll"
+        target:
+          selector: "#runTpl"
+      - type: "click"
+        target:
+          selector: "#runTpl"
+        done:
+          visible: "h1.run"
+  - id: "pass"
+    narration: "This time it passes, and the pipeline is saved as a reusable skill."
+    intent: "The second run passes and saves a skill."
+    timing: "parallel"
     actions:
       - type: "hover"
         target:
@@ -109,60 +134,10 @@ segments:
           selector: ".learned"
       - type: "wait"
         duration: 1200
-    timing: "parallel"
-    audioDuration: 3768
-    videoDuration: 7496
-  - id: "reuse"
-    narration: "Now a second task, in plain words."
-    intent: "Type a myoglobin task into the composer and run it."
-    actions:
-      - type: "click"
-        target:
-          selector: "[data-nav='home']"
-        done:
-          visible: "#prompt"
-      - type: "type"
-        target:
-          selector: "#prompt"
-        text: "Fold human myoglobin, UniProt P02144, and tell me how far to trust the model."
-        delay: 25
-      - type: "click"
-        target:
-          selector: "#runPrompt"
-        done:
-          visible: "h1.run"
-    timing: "parallel"
-    audioDuration: 2232
-    videoDuration: 4971
-  - id: "reused"
-    narration: "This time it reuses the saved skill, skips research and planning, and passes again. So the skill is now validated."
-    intent: "Reuse run finishes; validated skill shown."
-    actions:
-      - type: "hover"
-        target:
-          selector: "h1.run"
-        done:
-          visible: ".learned"
-          timeout: 30000
-      - type: "scroll"
-        target:
-          selector: ".learned"
-      - type: "wait"
-        duration: 1000
-    timing: "parallel"
-    audioDuration: 7104
-    videoDuration: 11360
   - id: "outro"
-    narration: "Its standing comes only from evidence. That's labloop: it does the work once, and keeps the skill."
-    intent: "Open the skill page."
-    actions:
-      - type: "click"
-        target:
-          selector: "[data-open]"
-        done:
-          visible: ".skillcard, .cols"
-      - type: "wait"
-        duration: 3000
+    narration: "The Mubit gateway records every agent call, and Mubit memory lets each run start from what earlier runs learned."
+    intent: "Hold on the saved skill."
     timing: "parallel"
-    audioDuration: 5712
-    videoDuration: 5715
+    actions:
+      - type: "wait"
+        duration: 2000

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How labloop uses Mubit</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="viz.css">
+<style>
+h2 { position: absolute; left: 60px; top: 40px; margin: 0; font-size: 40px; }
+.agent { left: 60px; width: 250px; height: 62px; padding: 10px 14px; display: grid; grid-template-columns: 1fr auto; align-items: center; row-gap: 2px; transition: box-shadow 0.5s; }
+.agent b { font-weight: 500; font-size: 15px; }
+.agent small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.agent .model { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--bg); }
+.agent .model.opus { background: #efe0d6; }
+.agent.hot { box-shadow: 0 0 0 2px var(--glow), 0 10px 30px rgba(231, 194, 125, 0.3); }
+#gateway { left: 440px; top: 150px; width: 360px; height: 236px; }
+#memory { left: 440px; top: 418px; width: 360px; }
+.dark h3 { margin: 4px 0 2px; font-size: 26px; }
+.dark .host { font-size: 12px; color: #bdb3a4; }
+.log { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.log div { font-size: 12.5px; display: flex; gap: 8px; align-items: center; opacity: 0; transform: translateX(-8px); transition: all 0.4s; }
+.log div.on { opacity: 1; transform: none; }
+.log .ok { margin-left: auto; color: var(--glow); font-size: 11.5px; }
+.verbs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.verb { border-radius: 12px; padding: 8px 10px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08); transition: all 0.5s; }
+.verb b { display: block; font-weight: 500; font-size: 14.5px; color: #8f877b; transition: color 0.5s; }
+.verb span { font-size: 11px; color: #7d756a; }
+.verb.on { background: rgba(231, 194, 125, 0.16); border-color: rgba(231, 194, 125, 0.55); }
+.verb.on b { color: #fff3dc; }
+#models { left: 930px; top: 205px; width: 290px; }
+#modal { left: 930px; top: 470px; width: 290px; }
+.side h4 { margin: 2px 0 8px; font-size: 22px; font-family: 'Instrument Serif', serif; font-weight: 400; }
+.side .row { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; border-top: 1px solid var(--line); }
+.side .row span:last-child { color: var(--muted); }
+.label { position: absolute; font-size: 12px; color: #6b6458; background: var(--bg); padding: 2px 8px; border-radius: 999px; opacity: 0; transition: opacity 0.5s; }
+.label.on { opacity: 1; }
+circle.packet { fill: var(--glow); }
+</style>
+</head>
+<body>
+<div class="stage">
+  <h2 class="serif fade" id="title">How labloop uses Mubit</h2>
+
+  <svg class="wires" viewBox="0 0 1280 720" width="1280" height="720">
+    <path id="w0" d="M310 181 C 380 181, 380 214, 440 214"/>
+    <path id="w1" d="M310 259 C 380 259, 380 238, 440 238"/>
+    <path id="w2" d="M310 337 C 380 337, 380 262, 440 262"/>
+    <path id="w3" d="M310 415 C 380 415, 380 286, 440 286"/>
+    <path id="w4" d="M310 493 C 390 493, 390 310, 440 310"/>
+    <path id="wm" d="M800 268 L 930 268"/>
+    <path id="write" d="M310 505 C 380 505, 380 500, 440 500"/>
+    <path id="recall" d="M440 580 C 340 580, 340 430, 310 425"/>
+    <circle class="packet" r="4" opacity="0"><animateMotion id="p0" dur="1.1s" begin="indefinite" repeatCount="indefinite"><mpath href="#w0"/></animateMotion></circle>
+    <circle class="packet" r="4" opacity="0"><animateMotion id="p1" dur="1.3s" begin="indefinite" repeatCount="indefinite"><mpath href="#w2"/></animateMotion></circle>
+    <circle class="packet" r="4" opacity="0"><animateMotion id="p2" dur="1.2s" begin="indefinite" repeatCount="indefinite"><mpath href="#w3"/></animateMotion></circle>
+    <circle class="packet" r="4" opacity="0"><animateMotion id="p3" dur="0.9s" begin="indefinite" repeatCount="indefinite"><mpath href="#wm"/></animateMotion></circle>
+    <circle class="packet" r="5" opacity="0"><animateMotion id="pw" dur="1.4s" begin="indefinite" repeatCount="indefinite"><mpath href="#write"/></animateMotion></circle>
+    <circle class="packet" r="5" opacity="0"><animateMotion id="pr" dur="1.6s" begin="indefinite" repeatCount="indefinite"><mpath href="#recall"/></animateMotion></circle>
+  </svg>
+
+  <div class="card agent fade" id="a0" style="top:150px"><b>applicability</b><span class="model">Haiku 5.5</span><small>does a saved skill fit?</small></div>
+  <div class="card agent fade" id="a1" style="top:228px"><b>researcher</b><span class="model">Haiku 5.5</span><small>writes literature queries</small></div>
+  <div class="card agent fade" id="a2" style="top:306px"><b>extractor</b><span class="model">Haiku 5.5</span><small>pulls methods from papers</small></div>
+  <div class="card agent fade" id="a3" style="top:384px"><b>planner</b><span class="model opus">Opus 5</span><small>designs the experiment</small></div>
+  <div class="card agent fade" id="a4" style="top:462px"><b>reviewer</b><span class="model opus">Opus 5</span><small>writes lessons after grading</small></div>
+
+  <div class="dark pop" id="gateway">
+    <div class="eyebrow">Mubit gateway</div>
+    <h3 class="serif">Every agent call</h3>
+    <div class="host mono">api.mubit.ai/anthropic · session = run id</div>
+    <div class="log" id="log">
+      <div><span class="dot" style="background:var(--glow)"></span>applicability · run 5d8e3a<span class="ok">recorded</span></div>
+      <div><span class="dot" style="background:var(--glow)"></span>researcher · run 5d8e3a<span class="ok">recorded</span></div>
+      <div><span class="dot" style="background:var(--glow)"></span>planner · run 5d8e3a<span class="ok">recorded</span></div>
+      <div><span class="dot" style="background:var(--glow)"></span>reviewer · run 5d8e3a<span class="ok">recorded</span></div>
+    </div>
+  </div>
+
+  <div class="card side pop" id="models"><div class="eyebrow">Models</div><h4>Claude</h4>
+    <div class="row"><span>Opus 5</span><span>planner, reviewer</span></div>
+    <div class="row"><span>Haiku 5.5</span><span>three helpers</span></div>
+  </div>
+
+  <div class="dark pop" id="memory">
+    <div class="eyebrow">Mubit memory</div>
+    <h3 class="serif">Lessons between runs</h3>
+    <div class="verbs">
+      <div class="verb" id="v-reflect"><b>Reflect</b><span>reviewer reads the result</span></div>
+      <div class="verb" id="v-write"><b>Write</b><span class="mono">remember()</span></div>
+      <div class="verb" id="v-retrieve"><b>Retrieve</b><span class="mono">get_context()</span></div>
+      <div class="verb" id="v-reinforce"><b>Reinforce</b><span class="mono">record_outcome()</span></div>
+    </div>
+  </div>
+  <div class="label" id="l-write" style="left:322px; top:470px">write lessons</div>
+  <div class="label" id="l-recall" style="left:300px; top:592px">recall before planning</div>
+
+  <div class="card side pop" id="modal"><div class="eyebrow">Experiments</div><h4>GPUs on Modal</h4>
+    <div class="row"><span>ESMFold</span><span>A10G</span></div>
+    <div class="row"><span>Boltz-2</span><span>H100</span></div>
+    <div class="row"><span>Chai-1</span><span>H100</span></div>
+  </div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const on = (ids, gap = 160) => ids.forEach((id, i) => setTimeout(() => $(id).classList.add('on'), i * gap));
+const packets = (ids) => ids.forEach((id) => { const a = $(id); a.parentElement.setAttribute('opacity', '1'); a.beginElement(); });
+window.viz = {
+  go(step) {
+    if (step === 1) on(['title', 'a0', 'a1', 'a2', 'a3', 'a4'], 140);
+    if (step === 2) {
+      on(['gateway', 'w0', 'w1', 'w2', 'w3', 'w4', 'wm', 'models'], 90);
+      setTimeout(() => packets(['p0', 'p1', 'p2', 'p3']), 900);
+      [...$('log').children].forEach((row, i) => setTimeout(() => row.classList.add('on'), 1100 + i * 700));
+    }
+    if (step === 3) {
+      on(['memory']);
+      setTimeout(() => { $('a4').classList.add('hot'); $('v-reflect').classList.add('on'); }, 700);
+      setTimeout(() => { on(['write', 'l-write']); $('write').classList.add('hot'); packets(['pw']); $('v-write').classList.add('on'); }, 1700);
+    }
+    if (step === 4) {
+      $('a4').classList.remove('hot');
+      on(['recall', 'l-recall']); $('recall').classList.add('hot'); packets(['pr']);
+      setTimeout(() => { $('a3').classList.add('hot'); $('v-retrieve').classList.add('on'); }, 600);
+      setTimeout(() => $('v-reinforce').classList.add('on'), 3200);
+    }
+    if (step === 5) { $('a3').classList.remove('hot'); on(['modal']); }
+  },
+};
+</script>
+</body>
+</html>

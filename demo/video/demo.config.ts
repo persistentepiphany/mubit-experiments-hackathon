@@ -3,36 +3,42 @@ import type { Page } from '@playwright/test';
 import { defineDemo } from 'video-demo/define';
 
 /**
- * Folio, labloop's web frontend (labloop/web/index.html), filmed against
- * mocked API responses. Folio is one static page that calls the API on its
- * own origin, so the "build" is copying that page into place. Each entry
- * opens the app at a different chapter of the story; mock.ts reads the entry
- * name to decide how far the two runs have got.
+ * The labloop website (labloop/web/index.html) and four explainer pages
+ * (viz/), filmed against mocked API responses. The website is one static page
+ * that calls the API on its own origin, so the "build" copies it and the
+ * explainers into place. Each entry opens a chapter of the story; mock.ts
+ * reads the entry name to decide how far the three runs have got.
  */
 
 const RUN_A = 'r-20261021-150212-5d8e3a';
 
-/** Folio has no loaded flag: its heading renders after the data arrives. */
-const loaded = async (page: Page) => {
+/** The website has no loaded flag: its heading renders after the data arrives. */
+const site = async (page: Page) => {
   await page.locator('#view h1').first().waitFor({ state: 'visible' });
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 };
 
+const explainer = async (page: Page) => {
+  await page.waitForFunction(() => 'viz' in window);
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+};
+
 export default defineDemo({
-  name: 'labloop-folio',
+  name: 'labloop-mubit',
 
   build: {
-    command: 'mkdir -p demo/.folio && cp labloop/web/index.html demo/.folio/index.html',
+    command:
+      'mkdir -p demo/.folio && cp labloop/web/index.html demo/.folio/index.html && rm -rf demo/.folio/viz && cp -r demo/video/viz demo/.folio/viz',
     output: 'demo/.folio',
-    forbid: ['api.mubit.ai', '.modal.run'],
+    forbid: ['api.mubit.ai/anthropic', '.modal.run'],
   },
 
-  // Folio's content column is about 1240px wide, so it is filmed at 720p and
-  // the capture is scaled 1.5x (DEMO_VIDEO_SCALE) to a 1080p video.
+  // The website's content column is about 1240px wide, so everything is
+  // filmed at 1280x720 and scaled up by DEMO_VIDEO_SCALE when captured.
   stage: { width: 1280, height: 720 },
 
   clock: {
-    anchor: '2026-10-21T15:02:00.000Z',
+    anchor: '2026-10-21T16:06:00.000Z',
     timezone: 'UTC',
     locale: 'en-US',
   },
@@ -40,17 +46,29 @@ export default defineDemo({
   themes: ['light'],
 
   entries: {
-    app: { path: '/', ready: loaded },
-    research: { path: `/#/runs/${RUN_A}`, ready: loaded },
-    plan: { path: `/#/runs/${RUN_A}`, ready: loaded },
-    grade: { path: `/#/runs/${RUN_A}`, ready: loaded },
-    reuse: { path: '/', ready: loaded },
-    skill: { path: '/#/skills/uniprot_monomer_fold', ready: loaded },
+    app: { path: '/', ready: site },
+    run1: { path: `/#/runs/${RUN_A}`, ready: site },
+    lesson: { path: `/#/runs/${RUN_A}`, ready: site },
+    run2: { path: '/', ready: site },
+    reuse: { path: '/', ready: site },
+    'viz-intro': { path: '/viz/intro.html', ready: explainer },
+    'viz-mubit': { path: '/viz/mubit.html', ready: explainer },
+    'viz-memory': { path: '/viz/memory.html', ready: explainer },
+    'viz-outro': { path: '/viz/outro.html', ready: explainer },
   },
 
   mock: (page, ctx) => import('./mock.ts').then((made) => made.mock(page, ctx)),
 
-  voice: { name: 'af_heart', speed: 1, saidAs: [[/\blabloop\b/gi, 'lab loop']] },
+  voice: {
+    name: 'af_heart',
+    speed: 1.1,
+    saidAs: [
+      [/\bMubit\b/g, 'Mew-bit'],
+      [/\bESMFold\b/g, 'E S M fold'],
+      [/\bpTM\b/g, 'P T M'],
+      [/\b3D\b/g, 'three D'],
+    ],
+  },
 
-  tour: ['home', 'submit', 'research', 'plan', 'grade', 'reuse', 'skill'],
+  tour: ['viz-intro', 'viz-mubit', 'task', 'run1', 'lesson', 'viz-memory', 'run2', 'reuse', 'viz-outro'],
 });

@@ -1,40 +1,39 @@
 # Demo videos
 
-Two narrated recordings of Folio, labloop's web frontend (`labloop/web/index.html`), driven by Playwright against mocked API responses. No backend, Modal app, model call or real data is involved.
+Two narrated recordings of the labloop website (`labloop/web/index.html`) for the Mubit hackathon, driven by Playwright against mocked API responses. No backend, Modal app, model call or real data is involved.
 
-| File | Length | Made with |
-| --- | --- | --- |
-| `out/labloop-folio-demo.mp4` | about 2 min | [video-demo](https://github.com/nilbuild/video-demo) scenes, framed in the style of [Recordly](https://github.com/webadderallorg/recordly) |
-| `out/labloop-folio-ndemo.mp4` | about 1 min | an [ndemo](https://github.com/splitbrain/ndemo) playbook |
+| File | Made with |
+| --- | --- |
+| `out/labloop-mubit-demo.mp4` | [video-demo](https://github.com/nilbuild/video-demo) scenes and explainers, joined with crossfades and framed in the style of [Recordly](https://github.com/webadderallorg/recordly) |
+| `out/labloop-mubit-ndemo.mp4` | an [ndemo](https://github.com/splitbrain/ndemo) playbook, about a minute long |
 
 ## The story
 
-Both cuts follow the same two runs:
+The video follows the sequence labloop's README reports from its real runs, with invented data around it.
 
-1. The home page, with the composer, the templates and the saved skills.
-2. The "Fold a UniProt entry" template with human lysozyme (P61626). No saved skill fits, and the match step says why.
-3. Research: two Europe PMC queries, with two papers frozen into the run.
-4. Plan and freeze: `fetch_uniprot → esmfold` with three acceptance checks, frozen under a SHA-256 digest.
-5. Run, grade and learn: the checks pass, the reviewer writes a summary and lessons, and the pipeline is saved as the draft skill `uniprot_monomer_fold`.
-6. A second task in plain words, for human myoglobin (P02144). The match step reuses the skill and quotes its `applies_when` condition, research and planning are skipped, the run passes, and the skill becomes validated.
-7. The skill page: its conditions, its evidence, and the form to run it again.
+1. What labloop is, and how it uses Mubit: five agents (the planner and reviewer on Claude Opus 5, three helpers on Claude Haiku 5.5) whose every call goes through the Mubit gateway, filed under its run; and Mubit memory, where the reviewer writes lessons after a run, the planner recalls them before the next, and `record_outcome` marks the ones that led to a pass.
+2. Run 1 folds a 30-residue chain from the "Fold a protein" template. Nothing is recalled and no skill fits, so it researches and plans from scratch, freezes the check `ptm >= 0.5`, and fails it with pTM 0.494.
+3. The reviewer's lesson, that 0.5 is too strict for so short a chain, is written to Mubit memory.
+4. Run 2 is the same task. The activity log shows one lesson recalled, the planner freezes a floor of 0.3, the run passes, and the pipeline is saved as a skill.
+5. Run 3 folds Trp-cage, a different 20-residue protein. It matches the skill, skips research and planning, passes, and the skill becomes validated.
 
-The mocked responses follow the shapes written by `labloop/api.py`, `research.py`, `grading.py` and `orchestrator.py`, including `GET /runs`, `results.counts`, and the `summary` and `lesson_texts` fields on the status. All names, scores and run ids are invented.
+Callouts on the website mark where Mubit acts (`get_context`, `remember`, `record_outcome`, and the planner's calls through the gateway).
 
 ## Layout
 
 | Path | Content |
 | --- | --- |
-| `video/demo.config.ts` | The video-demo workspace config. The build copies Folio into place, and each entry opens the app at one chapter of the story. |
-| `video/mock.ts` | Answers every request Folio makes inside Playwright, and lets a scene move a run to its next phase. |
-| `video/seed/world.ts` | The invented lab: two earlier skills, four earlier runs, and the two runs the demo performs. |
-| `video/seed/fonts/` | Folio's two Google Fonts (Instrument Serif and Geist, both OFL), served locally so filming needs no network. |
-| `video/scenes/` | The seven scenes, with their narration. |
-| `video/ui.ts` | Locators for Folio, and the helper that plays a line over a gesture. |
-| `frame.py` | Places the stitched tour on a blurred Recordly wallpaper with padding, rounded corners and a shadow. |
-| `mock-server.mjs` | Folio and the same mocked API as a real local server, with runs that advance on a timer. ndemo uses it, and so can a person. |
-| `ndemo/folio-tour/folio-tour.yaml` | The ndemo playbook. |
-| `ndemo/voice.mjs` | Voices the playbook with the local Kokoro model, so ndemo needs no OpenAI key. |
+| `video/script.ts` | Every line of narration, in order. |
+| `video/scenes/` | The nine scenes: four explainers (`viz-*`) and five on the website. |
+| `video/viz/` | The explainer pages, in the website's palette and type, stepped forward by the scenes. |
+| `video/mock.ts`, `video/seed/world.ts` | Every API response, and the three runs with their activity events in the formats `orchestrator.py` and `research.py` emit. |
+| `video/ui.ts` | Locators, the Mubit callouts, and the helper that plays a line over a gesture. |
+| `video/prevoice.mjs` | Voices every line before filming. |
+| `video/demo.config.ts` | The video-demo workspace config. |
+| `compose.py` | Checks that no narration overlaps, frames the website scenes on a Recordly wallpaper, and joins all scenes with crossfades. |
+| `patches/video-demo.patch` | Makes video-demo hold each line for its real spoken length, and write each clip's narration timeline. |
+| `mock-server.mjs` | The website and the same mocked API as a local server whose runs advance on a timer. ndemo uses it. |
+| `ndemo/` | The ndemo playbook, and `voice.mjs`, which voices it locally so ndemo needs no OpenAI key. |
 | `setup.sh`, `record.sh` | Fetch the tools at pinned commits, then record both cuts. |
 
 ## Recording
@@ -44,18 +43,14 @@ demo/setup.sh     # clones the three tools into demo/.tools, installs Chromium a
 demo/record.sh    # writes both videos to demo/out; ONLY=tour or ONLY=ndemo records one
 ```
 
-To click through the mocked app by hand, run `node demo/mock-server.mjs` and open http://127.0.0.1:8765/. `curl -X POST localhost:8765/__reset` starts again.
+To click through the mocked website, run `node demo/mock-server.mjs` and open http://127.0.0.1:8765/. `curl -X POST localhost:8765/__reset` starts again.
 
-## How each tool is used
+## Narration
 
-**video-demo** builds and pins the app, mocks every request in-process, pins the clock, and films each scene through a CDP screencast with an eased cursor, push-in zoom on the subject of each line, and a local Kokoro voice. It then stitches the scenes into `full-tour.mp4`. Folio is filmed at 1280×720 and captured at 1.25×, so the tour is 1600×900.
-
-**Recordly** is a desktop recorder and editor whose frame styling (a wallpaper, padding, rounded corners and a shadow) is what makes its exports look finished. It needs a desktop session, so `frame.py` reproduces that frame with ffmpeg, on Recordly's own `farmvalley` wallpaper, and outputs 1920×1080 at 60 fps.
-
-**ndemo** plays a YAML playbook of narrated segments in a real browser and merges the result with the narration. It synthesises speech through OpenAI unless the audio file for a segment already exists, so `voice.mjs` writes those files with the same Kokoro voice first.
+The voice is Kokoro (`af_heart`, speed 1.1), run locally. video-demo paces each line by an estimate of 3.7 words a second, but this voice speaks at about 2.3, so a long line used to run into the next one. `prevoice.mjs` synthesises every line first, the patched engine then holds each line for its real length plus 0.45 seconds, and `compose.py` refuses to build if any two lines still overlap or a line falls inside a transition. The script was edited against the [humanizer](https://github.com/blader/humanizer) rules, and the voiced lines were transcribed back with faster-whisper to check pronunciation.
 
 ## Known limits
 
-- On a four-core container the screencast delivers about 30 to 40 painted frames per second during camera moves. The video is encoded at 60 fps, so zooms show slight judder. A faster machine, or `DEMO_VIDEO_SCALE=1`, gives smoother motion.
-- Folio polls a running run every 2.5 seconds. The scenes trigger a re-render when they advance a run, so the screen changes on the narrated beat. The ndemo cut runs against the timer-driven server and relies on Folio's own polling.
-- ndemo rewrites the playbook when it renders, adding `audioDuration` to each segment and dropping comments.
+- Mubit memory here is the design in `labloop/memory.py`. labloop's README notes that its real runs could not reach the Mubit memory API and fell back to the local copy, while model calls did go through the gateway.
+- On a four-core container the screencast delivers about 30 to 40 painted frames per second during camera moves, encoded at 60 fps, so zooms show slight judder.
+- ndemo rewrites its playbook when it renders, adding `audioDuration` to each segment and dropping comments.

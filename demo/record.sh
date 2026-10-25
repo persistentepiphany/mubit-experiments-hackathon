@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Records both cuts into demo/out:
-#   labloop-folio-demo.mp4   the ~2 minute narrated tour (video-demo + frame)
-#   labloop-folio-ndemo.mp4  the 1 minute cut (ndemo)
+#   labloop-mubit-demo.mp4    the narrated tour (video-demo scenes, composed)
+#   labloop-mubit-ndemo.mp4   the one-minute cut (ndemo)
 #
 # Run demo/setup.sh first. Set ONLY=tour or ONLY=ndemo to record one of them.
 
@@ -14,13 +14,17 @@ mkdir -p "$OUT"
 ONLY="${ONLY:-all}"
 
 if [ "$ONLY" != ndemo ]; then
-  # Folio is filmed at 1280x720 and captured at 1.25x, so the tour is 1600x900,
-  # which frame.py places on a 1920x1080 wallpaper. One worker keeps the
+  # Every line is voiced first, so each scene holds a line for its real length.
+  node "$DEMO/video/prevoice.mjs"
+  # Explainers are filmed full frame at 1920x1080; website scenes at 1600x900,
+  # which compose.py places in a frame on a wallpaper. One worker keeps the
   # capture frame rate up on a small machine.
-  DEMO_VIDEO_SCALE="${DEMO_VIDEO_SCALE:-1.25}" DEMO_WORKERS="${DEMO_WORKERS:-1}" \
-    "$TOOLS/video-demo/scripts/demo" --project "$DEMO/video"
-  python3 "$DEMO/frame.py" "$DEMO/video/demo-out/light/full-tour.mp4" \
-    "$TOOLS/recordly/public/wallpapers/farmvalley.jpg" "$OUT/labloop-folio-demo.mp4"
+  DEMO_TOUR=0 DEMO_WORKERS=1 DEMO_VIDEO_SCALE=1.5 \
+    "$TOOLS/video-demo/scripts/demo" --project "$DEMO/video" --grep "viz-"
+  DEMO_TOUR=0 DEMO_WORKERS=1 DEMO_VIDEO_SCALE=1.25 DEMO_BUILD=0 \
+    "$TOOLS/video-demo/scripts/demo" --project "$DEMO/video" --grep "task|run1|lesson|run2|reuse"
+  python3 "$DEMO/compose.py" "$DEMO/video/demo-out/light" \
+    "$TOOLS/recordly/public/wallpapers/farmvalley.jpg" "$OUT/labloop-mubit-demo.mp4"
 fi
 
 if [ "$ONLY" != tour ]; then
@@ -34,5 +38,5 @@ if [ "$ONLY" != tour ]; then
   RUN=()
   if [ -z "${DISPLAY:-}" ] && command -v xvfb-run >/dev/null 2>&1; then RUN=(xvfb-run -a); fi
   ${RUN[@]+"${RUN[@]}"} "$TOOLS/ndemo/ndemo" render "$PLAYBOOK" \
-    --output "$OUT/labloop-folio-ndemo.mp4"
+    --output "$OUT/labloop-mubit-ndemo.mp4"
 fi

@@ -31,6 +31,9 @@ PW="${DEMO_PLAYWRIGHT:-1.63.0}"
 
 (
   cd "$TOOLS/video-demo"
+  # Holds each line for its real spoken length (so lines never overlap),
+  # exports the voice module, and writes each clip's narration timeline.
+  git checkout --quiet -- . && git apply "$DEMO/patches/video-demo.patch"
   sed -i.bak "s/\"@playwright\/test\": \"[^\"]*\"/\"@playwright\/test\": \"$PW\"/" package.json && rm -f package.json.bak
   rm -f package-lock.json
   npm install --no-audit --no-fund

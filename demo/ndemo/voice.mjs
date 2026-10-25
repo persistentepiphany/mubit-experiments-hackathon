@@ -31,7 +31,12 @@ const audioDir = join(dirname(resolve(playbookPath)), playbook.recording?.output
 mkdirSync(audioDir, { recursive: true });
 
 /** Respellings for the synthesiser only; the hash is over the playbook's own words. */
-const SAID_AS = [[/\blabloop\b/gi, 'lab loop']];
+const SAID_AS = [
+  [/\blabloop\b/gi, 'lab loop'],
+  [/\bMubit\b/g, 'Mew-bit'],
+  [/\bESMFold\b/g, 'E S M fold'],
+  [/\bpTM\b/g, 'P T M'],
+];
 
 for (const segment of playbook.segments) {
   if (!segment.narration) continue;

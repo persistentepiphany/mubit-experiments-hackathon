@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>labloop and Mubit</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="viz.css">
+<style>
+h2 { position: absolute; left: 60px; top: 40px; margin: 0; font-size: 40px; }
+.track { position: absolute; left: 60px; right: 60px; top: 150px; display: flex; align-items: stretch; gap: 14px; }
+.node { position: relative; flex: 1; background: #fff; border-radius: 16px; padding: 16px; box-shadow: 0 10px 28px rgba(42, 38, 34, 0.07); }
+.node h4 { margin: 6px 0 8px; font-size: 22px; font-family: 'Instrument Serif', serif; font-weight: 400; line-height: 1.15; }
+.node p { margin: 0; font-size: 13px; color: #5e584f; line-height: 1.45; }
+.node .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 10px; border-radius: 999px; margin-top: 10px; }
+.node.mem { background: linear-gradient(160deg, var(--mubit-2), var(--mubit)); color: #f4eee4; }
+.node.mem p { color: #cfc5b6; }
+.node.mem .eyebrow { color: #bdb3a4; }
+.join { align-self: center; color: var(--muted); font-size: 20px; }
+.bottom { position: absolute; left: 60px; right: 60px; top: 420px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.bottom .dark { position: relative; }
+.bottom h3 { margin: 4px 0 6px; font-size: 26px; }
+.bottom p { margin: 0; font-size: 14.5px; color: #d9cfc0; line-height: 1.5; }
+.end { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; font-size: 15px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="stage">
+  <h2 class="serif fade" id="title">What happened across three runs</h2>
+  <div class="track">
+    <div class="node pop" id="n1"><div class="eyebrow">Run 1</div><h4>pTM floor 0.5</h4><p>The fold scored pTM 0.494.</p><span class="status fail"><span class="dot" style="background:var(--fail)"></span>Failed</span></div>
+    <span class="join pop" id="j1">→</span>
+    <div class="node mem pop" id="n2"><div class="eyebrow">Mubit memory</div><h4>"0.5 is too strict for short chains"</h4><p>Written after run 1, recalled before run 2.</p></div>
+    <span class="join pop" id="j2">→</span>
+    <div class="node pop" id="n3"><div class="eyebrow">Run 2</div><h4>pTM floor 0.3</h4><p>Same fold, now within its checks. Saved as a skill.</p><span class="status pass"><span class="dot" style="background:var(--olive)"></span>Passed · draft skill</span></div>
+    <span class="join pop" id="j3">→</span>
+    <div class="node pop" id="n4"><div class="eyebrow">Run 3</div><h4>Trp-cage, 20 residues</h4><p>Matched the skill, so no research or planning.</p><span class="status pass"><span class="dot" style="background:var(--olive)"></span>Passed · validated</span></div>
+  </div>
+  <div class="bottom">
+    <div class="dark pop" id="b1"><div class="eyebrow">Mubit gateway</div><h3 class="serif">A record of every agent call</h3><p>Five agents, one fixed prompt each, every call grouped under its run.</p></div>
+    <div class="dark pop" id="b2"><div class="eyebrow">Mubit memory</div><h3 class="serif">Each run starts from the last one's lessons</h3><p>Lessons are written after grading, recalled before planning, and reinforced when they lead to a pass.</p></div>
+  </div>
+  <div class="end fade" id="end">labloop · github.com/persistentepiphany/mubit-experiments-hackathon</div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const on = (ids, gap = 220) => ids.forEach((id, i) => setTimeout(() => $(id).classList.add('on'), i * gap));
+window.viz = {
+  go(step) {
+    if (step === 1) on(['title', 'n1', 'j1', 'n2', 'j2', 'n3', 'j3', 'n4'], 260);
+    if (step === 2) on(['b1', 'b2', 'end'], 400);
+  },
+};
+</script>
+</body>
+</html>

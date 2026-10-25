@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>labloop</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="viz.css">
+<style>
+.center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+h1 { font-size: 120px; line-height: 1; margin: 18px 0 10px; }
+.sub { font-size: 24px; color: #4a443c; max-width: 760px; line-height: 1.4; }
+.flow { display: flex; align-items: center; gap: 14px; margin-top: 46px; }
+.step { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 22px; border-radius: 16px; background: #fff; min-width: 150px;
+  box-shadow: 0 8px 24px rgba(42, 38, 34, 0.06); font-size: 17px; font-weight: 500; transition: box-shadow 0.5s, transform 0.5s; }
+.step small { font-size: 12.5px; color: var(--muted); font-weight: 400; }
+.arrow { color: var(--muted); font-size: 20px; }
+.step.learn.hot { box-shadow: 0 0 0 2px var(--glow), 0 14px 34px rgba(231, 194, 125, 0.35); transform: translateY(-4px); }
+.with { margin-top: 26px; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="center">
+    <div class="eyebrow fade" id="eyebrow">Built for the Mubit hackathon</div>
+    <h1 class="serif fade" id="title">labloop</h1>
+    <div class="sub fade" id="sub">An AI lab that runs protein experiments and learns from each one</div>
+    <div class="flow">
+      <div class="step pop" id="s1">Plan<small>agents design it</small></div><span class="arrow pop" id="a1">→</span>
+      <div class="step pop" id="s2">Run<small>GPUs on Modal</small></div><span class="arrow pop" id="a2">→</span>
+      <div class="step pop" id="s3">Check<small>frozen pass criteria</small></div><span class="arrow pop" id="a3">→</span>
+      <div class="step learn pop" id="s4">Learn<small>lessons for next time</small></div>
+    </div>
+    <div class="with fade" id="with"><span class="mubit-badge">Learning runs on Mubit</span></div>
+  </div>
+</div>
+<script>
+const on = (...ids) => ids.forEach((id, i) => setTimeout(() => document.getElementById(id).classList.add('on'), i * 180));
+window.viz = {
+  go(step) {
+    if (step === 1) on('eyebrow', 'title');
+    if (step === 2) on('sub');
+    if (step === 3) on('s1', 'a1', 's2', 'a2', 's3', 'a3', 's4');
+    if (step === 4) { document.getElementById('s4').classList.add('hot'); on('with'); }
+  },
+};
+</script>
+</body>
+</html>

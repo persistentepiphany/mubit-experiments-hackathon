@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A lesson through Mubit memory</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="viz.css">
+<style>
+h2 { position: absolute; left: 60px; top: 40px; margin: 0; font-size: 40px; }
+.run { top: 170px; width: 340px; padding: 18px 20px; }
+.run h4 { margin: 6px 0 10px; font-size: 26px; font-family: 'Instrument Serif', serif; font-weight: 400; }
+.run .row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; padding: 7px 0; border-top: 1px solid var(--line); }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 3px 10px; border-radius: 999px; }
+#mem { left: 470px; top: 200px; width: 340px; height: 300px; }
+#mem h3 { margin: 4px 0 6px; font-size: 26px; }
+.slot { margin-top: 12px; height: 104px; border-radius: 12px; border: 1px dashed rgba(255, 255, 255, 0.18); }
+.call { font-size: 12.5px; color: #e7c27d; margin-top: 12px; opacity: 0; transition: opacity 0.5s; }
+.call.on { opacity: 1; }
+.lesson { position: absolute; width: 300px; padding: 12px 14px; border-radius: 12px; background: #fff7e6; color: var(--ink); font-size: 13.5px; line-height: 1.45;
+  box-shadow: 0 0 0 1.5px var(--glow), 0 10px 30px rgba(231, 194, 125, 0.25); transition: left 1.3s cubic-bezier(0.5, 0, 0.2, 1), top 1.3s cubic-bezier(0.5, 0, 0.2, 1), opacity 0.6s; }
+.lesson b { display: block; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #9a7a3c; margin-bottom: 4px; font-weight: 500; }
+.planner { margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--soft); min-height: 162px; font-size: 13px; color: var(--muted); }
+.floor { margin-top: 14px; font-size: 15px; display: flex; justify-content: space-between; align-items: center; opacity: 0; transition: opacity 0.6s; }
+.floor.on { opacity: 1; }
+.floor b { font-weight: 500; font-size: 18px; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <h2 class="serif fade" id="title">One lesson, carried by Mubit</h2>
+
+  <div class="card run fade" id="run1" style="left:60px">
+    <div class="eyebrow">Run 1 · 30-residue chain</div>
+    <h4>Fold failed its own check</h4>
+    <div class="row"><span>pLDDT ≥ 70</span><span class="status pass"><span class="dot" style="background:var(--olive)"></span>89.7</span></div>
+    <div class="row"><span>pTM ≥ 0.5</span><span class="status fail"><span class="dot" style="background:var(--fail)"></span>0.494</span></div>
+  </div>
+
+  <div class="dark pop" id="mem">
+    <div class="eyebrow">Mubit memory</div>
+    <h3 class="serif">Stored lessons</h3>
+    <div class="slot"></div>
+    <div class="call mono" id="c-write">remember(lesson, session = run 1)</div>
+    <div class="call mono" id="c-read">get_context(task, session = run 2)</div>
+  </div>
+
+  <div class="card run fade" id="run2" style="left:880px">
+    <div class="eyebrow">Run 2 · same task</div>
+    <h4>Planner's input</h4>
+    <div class="planner" id="planner">advisory lessons</div>
+    <div class="floor" id="floor"><span>pTM floor it sets</span><b>0.3</b></div>
+  </div>
+
+  <div class="lesson fade" id="lesson" style="left:80px; top:410px"><b>Lesson from the reviewer</b>A pTM floor of 0.5 is too strict for a 30-residue chain. Use about 0.3 below 50 residues.</div>
+  <div class="lesson" id="copy" style="left:490px; top:291px; opacity:0"><b>Lesson from the reviewer</b>A pTM floor of 0.5 is too strict for a 30-residue chain. Use about 0.3 below 50 residues.</div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const on = (ids, gap = 180) => ids.forEach((id, i) => setTimeout(() => $(id).classList.add('on'), i * gap));
+window.viz = {
+  go(step) {
+    if (step === 1) on(['title', 'run1', 'lesson', 'mem']);
+    if (step === 2) {
+      const l = $('lesson'); l.style.left = '490px'; l.style.top = '291px';
+      setTimeout(() => $('c-write').classList.add('on'), 900);
+    }
+    if (step === 3) {
+      on(['run2']);
+      setTimeout(() => { $('c-read').classList.add('on'); const c = $('copy'); c.style.opacity = '1'; }, 500);
+      setTimeout(() => { const c = $('copy'); c.style.left = '900px'; c.style.top = '302px'; }, 900);
+    }
+    if (step === 4) on(['floor']);
+  },
+};
+</script>
+</body>
+</html>
