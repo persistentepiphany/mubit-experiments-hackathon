@@ -99,3 +99,40 @@ def test_every_available_tool_has_a_modal_function():
     source = (Path(__file__).parents[1] / "modal_apps" / "tools_app.py").read_text()
     defined = set(re.findall(r"@app\.function\([^)]*\)\s*\ndef (\w+)\(", source, re.S))
     assert set(catalog.available()) <= defined
+
+
+def test_europe_pmc_markup_is_removed_from_titles():
+    from labloop.toolkit.data import _plain
+
+    assert _plain("Docking &lt;i&gt;versus&lt;/i&gt; <i>co</i>-folding &amp; more") == "Docking versus co-folding & more"
+
+
+def test_role_spec_carries_an_optional_effort(monkeypatch):
+    import pytest
+
+    from labloop.models import ModelError, role_target
+
+    monkeypatch.setenv("LABLOOP_MODEL_PLANNER", "mubit:claude-opus-5@high")
+    assert role_target("planner") == ("mubit", "claude-opus-5", "high")
+    monkeypatch.setenv("LABLOOP_MODEL_PLANNER", "zai:glm-5.3")
+    assert role_target("planner") == ("zai", "glm-5.3", None)
+    monkeypatch.setenv("LABLOOP_MODEL_PLANNER", "mubit:claude-opus-5@extreme")
+    with pytest.raises(ModelError):
+        role_target("planner")
+
+
+def test_tool_knowledge_ingest_saves_cards_and_lessons(tmp_path):
+    from labloop.knowledge import KnowledgeStore, for_planner, ingest
+    from labloop.memory import LocalMemory
+    from labloop.models import ScriptedModels
+    from labloop.testing import EXTRACTION, FakeDispatcher
+
+    store, memory = KnowledgeStore(tmp_path / "knowledge"), LocalMemory(tmp_path / "memory")
+    reports = ingest(["esmfold", "fetch_uniprot"], store=store, dispatcher=FakeDispatcher(),
+                     models=ScriptedModels({"extractor": lambda u: EXTRACTION}), memory=memory, run_id="k-1")
+    assert [r["tool"] for r in reports] == ["esmfold"] and reports[0]["lessons"] == 2
+    card = store.get("esmfold")
+    assert card["version"] == 1 and card["papers_missing"] == ["10.1101/2022.07.20.500902"]
+    assert for_planner(store)[0]["guidance"][0]["source"].startswith("ESMFold")
+    assert "pLDDT" in memory.context("esmfold plddt confident", run_id="x")[0]["content"]
+    assert (tmp_path / "memory" / "skill_mirror.jsonl").read_text().count("tool_esmfold") == 1

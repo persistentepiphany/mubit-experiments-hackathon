@@ -17,6 +17,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from labloop.events import in_flight, read as read_events
 from labloop.skills import SkillStore, card
 from labloop.state import RUN_ID, RunDir, StateRoot, new_run_id
 
@@ -35,7 +36,8 @@ class SkillRunIn(BaseModel):
     description: str | None = None
 
 
-def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str | None]) -> FastAPI:
+def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str | None],
+               refresh_knowledge: Callable[[list[str] | None], str] | None = None) -> FastAPI:
     """`call_state(run_id)` is None for an unknown run, "queued" for a submitted run that has not
     written state yet, and an error message for a submitted run whose orchestrator call failed."""
     app = FastAPI(title="labloop", version="0.1.0")
@@ -60,7 +62,10 @@ def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str
             run = RunDir(path)
             status = run.read_json("run.json", {}) or {}
             task = run.read_json("task.json", {}) or {}
-            runs.append({"run_id": path.name, "description": task.get("description"), "phase": status.get("phase"),
+            events = read_events(path / "EVENTS.jsonl") if status.get("phase") not in ("done", "error") else []
+            runs.append({"activity": events[-1] if events else None,
+                         "in_flight": in_flight(events),
+                         "run_id": path.name, "description": task.get("description"), "phase": status.get("phase"),
                          "verdict": status.get("verdict"), "origin": status.get("origin"),
                          "skill": status.get("skill"),
                          "started_at": (status.get("history") or [{}])[0].get("at")})
@@ -92,7 +97,47 @@ def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str
             "decisions": run.read_jsonl("DECISIONS.jsonl"),
             "results": run.read_json("RESULTS.json"),
             "research": run.read_json("research/extractions.json"),
+            "events": read_events(path / "EVENTS.jsonl"),
         }
+
+    @app.get("/knowledge")
+    def knowledge() -> dict[str, Any]:
+        state.reload()
+        from labloop.knowledge import KnowledgeStore
+
+        cards = KnowledgeStore(state.knowledge).all()
+        return {"tools": [{"tool": c["tool"], "title": c.get("title"), "deployed": c.get("deployed"),
+                           "summary": c.get("summary"), "version": c.get("version"),
+                           "ingested_at": c.get("ingested_at"), "papers": c.get("papers", []),
+                           "papers_missing": c.get("papers_missing", []), "guidance": c.get("guidance", []),
+                           "reported_numbers": c.get("reported_numbers", []),
+                           "limitations": c.get("limitations", [])} for c in cards]}
+
+    @app.post("/knowledge/refresh", status_code=202)
+    def refresh(tools: list[str] | None = None) -> dict[str, Any]:
+        if refresh_knowledge is None:
+            raise HTTPException(501, "knowledge refresh is not configured here")
+        return {"job_id": refresh_knowledge(tools), "phase": "queued"}
+
+    @app.get("/jobs")
+    def list_jobs() -> dict[str, Any]:
+        state.reload()
+        jobs = []
+        for path in sorted(state.jobs.glob("j-*"), reverse=True)[:20] if state.jobs.exists() else []:
+            job = RunDir(path).read_json("job.json", {}) or {}
+            events = read_events(path / "EVENTS.jsonl")
+            jobs.append({**job, "job_id": path.name, "activity": events[-1] if events else None,
+                         "in_flight": in_flight(events) if job.get("phase") == "running" else []})
+        return {"jobs": jobs}
+
+    @app.get("/jobs/{job_id}")
+    def get_job(job_id: str) -> dict[str, Any]:
+        state.reload()
+        path = state.jobs / job_id
+        if not job_id.startswith("j-") or "/" in job_id or not path.exists():
+            raise HTTPException(404, "unknown job")
+        return {**(RunDir(path).read_json("job.json", {}) or {}), "job_id": job_id,
+                "events": read_events(path / "EVENTS.jsonl")}
 
     @app.get("/skills")
     def list_skills(include_retired: bool = False) -> dict[str, Any]:

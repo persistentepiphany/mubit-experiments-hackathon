@@ -40,7 +40,27 @@ def _fake_uniprot(args):
             "data": {"sequence": "TTCCPSIVARSNFNVCRLPGTPEALCATYTGCIIIPGATCPGDYAN", "header": "sp|P01542|CRAM_CRAAB"}}
 
 
+def _fake_corpus(args):
+    return {"tool": "literature_corpus", "scores": {"n_documents": 1, "n_full_text": 1, "searched": 3},
+            "artifacts": {"corpus": f"{args['run_id']}/{args['step_id']}/corpus"},
+            "data": {"manifest_sha256": "0" * 64, "errors": [], "documents": [{
+                "title": "Evolutionary-scale prediction of atomic-level protein structure with a language model",
+                "doi": "10.1126/science.ade2574", "year": "2023", "citations": 5540, "text_source": "biorxiv",
+                "full_text": True, "file": "ESM.txt"}]}}
+
+
+def _fake_paperqa(args):
+    return {"tool": "paperqa", "scores": {"n_documents": 11, "n_answers": len(args["questions"]), "cost_usd": 0.01},
+            "artifacts": {"answers": f"{args['run_id']}/{args['step_id']}/paperqa.json"},
+            "data": {"added": [{"docname": "ESM"}], "failed": [], "answers": [
+                {"question": q, "answer": "Predictions with mean pLDDT above 70 are confident (ESM 2023).",
+                 "contexts": [{"doc": "ESM", "citation": "ESMFold (2023). doi:10.1126/science.ade2574", "score": 8,
+                               "summary": "pLDDT above 70"}], "cost_usd": 0.005} for q in args["questions"]]}}
+
+
 FAKE_TOOLS: dict[str, Callable[[dict], dict]] = {
+    "literature_corpus": _fake_corpus,
+    "paperqa": _fake_paperqa,
     "esmfold": _fake_esmfold,
     "boltz2": _fake_boltz2,
     "literature_search": _fake_literature,
@@ -84,7 +104,11 @@ def esmfold_plan(threshold: float = 70.0) -> dict[str, Any]:
 
 EXTRACTION = {"relevant": True, "relevance_reason": "describes ESMFold",
               "procedure": {"steps": ["fold with ESMFold"], "tools": ["ESMFold"], "parameters": {}},
-              "reported_numbers": [], "summary": "ESMFold folds single sequences."}
+              "reported_numbers": [{"quantity": "mean pLDDT", "value": 70, "unit": "", "context": "confident fold",
+                                    "source": "ESMFold (2023). doi:10.1126/science.ade2574"}],
+              "guidance": [{"topic": "confidence", "statement": "mean pLDDT above 70 marks a confident fold",
+                            "source": "ESMFold (2023). doi:10.1126/science.ade2574"}],
+              "limitations": [], "summary": "ESMFold folds single sequences."}
 
 REVIEW = {"lessons": [{"content": "ESMFold on a short sequence gave mean pLDDT 82.5 against a threshold of 70.",
                        "lesson_type": "success"}], "summary": "passed"}

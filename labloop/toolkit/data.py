@@ -7,6 +7,7 @@ artifacts root, which is the `labloop-artifacts` Volume on Modal.
 
 from __future__ import annotations
 
+import html
 import json
 import re
 import urllib.error
@@ -69,6 +70,7 @@ def fetch_pdb(args: dict[str, Any], artifacts_root: Path | None = None) -> dict[
         raise ValueError(f"not a PDB id: {pdb_id!r}")
     text = _get(RCSB.format(pdb_id=pdb_id)).decode()
     chains = chains_from_pdb(text)
+    first = next(iter(chains), "")
     n_atoms = sum(1 for line in text.splitlines() if line.startswith(("ATOM", "HETATM")))
     artifacts = {}
     if artifacts_root is not None:
@@ -77,7 +79,13 @@ def fetch_pdb(args: dict[str, Any], artifacts_root: Path | None = None) -> dict[
         (artifacts_root / rel).write_text(text)
         artifacts["structure"] = str(rel)
     return {"tool": "fetch_pdb", "scores": {"n_atoms": n_atoms, "n_chains": len(chains)},
-            "artifacts": artifacts, "data": {"chains": chains}}
+            "artifacts": artifacts,
+            "data": {"chains": chains, "first_chain_id": first, "first_chain_sequence": chains.get(first, "")}}
+
+
+def _plain(text: str | None) -> str:
+    """Europe PMC titles and abstracts carry inline markup such as <i> and HTML entities."""
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", html.unescape(text or ""))).strip()
 
 
 def _strip_tags(xml: bytes) -> str:
@@ -97,10 +105,10 @@ def literature_search(args: dict[str, Any], artifacts_root: Path | None = None) 
     for r in payload.get("resultList", {}).get("result", []):
         record = {
             "id": r.get("id"), "source": r.get("source"), "pmid": r.get("pmid"), "pmcid": r.get("pmcid"),
-            "doi": r.get("doi"), "title": r.get("title"), "year": r.get("pubYear"),
+            "doi": r.get("doi"), "title": _plain(r.get("title")), "year": r.get("pubYear"),
             "journal": (r.get("journalInfo") or {}).get("journal", {}).get("title"),
             "is_open_access": r.get("isOpenAccess"),
-            "abstract": re.sub(r"<[^>]+>", "", r.get("abstractText") or ""),
+            "abstract": _plain(r.get("abstractText")),
             "fulltext_excerpt": None,
         }
         if fulltext_chars and r.get("pmcid") and r.get("isOpenAccess") == "Y":

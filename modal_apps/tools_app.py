@@ -53,7 +53,10 @@ esm_download_image = esm_base
 
 boltz_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .uv_pip_install("boltz==2.1.1")
+    # Boltz 2.1.1 leaves torch unpinned, and the newest torch is a CUDA 13 build whose NVRTC builtins are
+    # absent from the image. The cuEquivariance kernels it installs do not import against torch 2.7.1, so
+    # predictions run with --no_kernels.
+    .uv_pip_install("boltz==2.1.1", "torch==2.7.1")
     .add_local_python_source("labloop", ignore=["**/__pycache__/**", "**/*.pyc"])
 )
 boltz_download_image = (
@@ -67,6 +70,17 @@ chai_image = (
     .uv_pip_install("chai_lab==0.5.0")
     .uv_pip_install("torch==2.7.1", extra_index_url="https://download.pytorch.org/whl/cu128")
     .env({"CHAI_DOWNLOADS_DIR": str(CHAI_DIR)})
+    .add_local_python_source("labloop", ignore=["**/__pycache__/**", "**/*.pyc"])
+)
+
+PAPERQA_DIR = Path("/weights/paperqa")
+paperqa_volume = modal.Volume.from_name("labloop-weights-paperqa", create_if_missing=True)
+keys = modal.Secret.from_name("labloop-keys")
+paperqa_image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .uv_pip_install("torch==2.7.1", index_url="https://download.pytorch.org/whl/cpu")
+    .uv_pip_install("paper-qa[local,pymupdf]==2026.8.12")
+    .env({"HF_HOME": str(PAPERQA_DIR / "hf")})
     .add_local_python_source("labloop", ignore=["**/__pycache__/**", "**/*.pyc"])
 )
 
@@ -145,9 +159,18 @@ def download_chai() -> str:
     return "chai-1 weights in labloop-weights-chai"
 
 
+@app.function(image=paperqa_image, volumes={PAPERQA_DIR: paperqa_volume}, timeout=20 * 60)
+def download_paperqa() -> str:
+    from sentence_transformers import SentenceTransformer
+
+    SentenceTransformer("multi-qa-MiniLM-L6-cos-v1")
+    paperqa_volume.commit()
+    return "PaperQA2 embedding model in labloop-weights-paperqa"
+
+
 @app.local_entrypoint()
 def download_all() -> None:
-    calls = [download_esmfold.spawn(), download_boltz.spawn(), download_chai.spawn()]
+    calls = [download_esmfold.spawn(), download_boltz.spawn(), download_chai.spawn(), download_paperqa.spawn()]
     for call in calls:
         print(call.get())
 
@@ -189,8 +212,6 @@ def esmfold(args: dict) -> dict:
 @app.function(image=boltz_image, gpu="H100", volumes={BOLTZ_DIR: boltz_volume, ARTIFACTS: artifacts_volume},
               timeout=40 * 60)
 def boltz2(args: dict) -> dict:
-    import importlib.util
-
     from labloop.toolkit.structure import boltz_outputs, boltz_scores, boltz_yaml, normalise_chains, safe_name
 
     started = time.time()
@@ -207,8 +228,7 @@ def boltz2(args: dict) -> dict:
                "--output_format", "mmcif", "--override"]
     if args.get("use_msa_server", True):
         command.append("--use_msa_server")
-    if importlib.util.find_spec("cuequivariance_torch") is None:
-        command.append("--no_kernels")
+    command.append("--no_kernels")
     log = subprocess.run(command, capture_output=True, text=True)
     (out / "boltz.log").write_text(log.stdout[-20000:] + "\n" + log.stderr[-20000:])
     if log.returncode != 0:
@@ -295,6 +315,52 @@ def literature_search(args: dict) -> dict:
     started = time.time()
     result = body(args)
     return {**result, "runtime_s": round(time.time() - started, 2), "versions": {}}
+
+
+@app.function(image=cpu_image, volumes={ARTIFACTS: artifacts_volume}, timeout=20 * 60)
+def literature_corpus(args: dict) -> dict:
+    """Search, rank, fetch full text and freeze a corpus, as the harness-experiments fetcher does."""
+    from labloop.toolkit.corpus import build
+
+    started = time.time()
+    out, rel = _out_dir(args, "literature_corpus")
+    result = build([str(q) for q in args["queries"]][:6], out / "corpus",
+                   page_size=max(1, min(int(args.get("page_size", 25)), 50)),
+                   max_docs=max(1, min(int(args.get("max_docs", 8)), 25)))
+    docs = result["documents"]
+    return _result("literature_corpus", started,
+                   {"n_documents": len(docs), "n_full_text": sum(d["full_text"] for d in docs),
+                    "searched": result["searched"]},
+                   {"corpus": rel / "corpus"},
+                   {"documents": docs, "manifest_sha256": result["manifest_sha256"], "errors": result["errors"]})
+
+
+@app.function(image=paperqa_image, volumes={ARTIFACTS: artifacts_volume, PAPERQA_DIR: paperqa_volume},
+              secrets=[keys], cpu=4.0, memory=8192, timeout=40 * 60)
+def paperqa(args: dict) -> dict:
+    """Answer questions over frozen corpora with PaperQA2, as harness-experiments lit/README.md runs it."""
+    import json as _json
+
+    from labloop.toolkit.readpapers import answer
+
+    started = time.time()
+    artifacts_volume.reload()
+    directories = []
+    for rel in args["corpora"]:
+        path = (ARTIFACTS / str(rel)).resolve()
+        if ARTIFACTS.resolve() not in path.parents or not path.is_dir():
+            raise ValueError(f"corpus {rel!r} is not a directory on the artifacts volume")
+        directories.append(path)
+    result = answer(directories, [str(q) for q in args["questions"]][:4],
+                    llm=str(args.get("llm", "mubit:claude-sonnet-5-5")),
+                    summary_llm=str(args.get("summary_llm", "mubit:claude-haiku-5-5")),
+                    evidence_k=int(args.get("evidence_k", 10)), max_sources=int(args.get("max_sources", 6)))
+    out, rel = _out_dir(args, "paperqa")
+    (out / "paperqa.json").write_text(_json.dumps(result, indent=1, default=str))
+    return _result("paperqa", started,
+                   {"n_documents": len(result["added"]), "n_answers": len(result["answers"]),
+                    "cost_usd": round(sum(a.get("cost_usd") or 0 for a in result["answers"]), 4)},
+                   {"answers": rel / "paperqa.json"}, result)
 
 
 # -------------------------------------------------------------------- smoke

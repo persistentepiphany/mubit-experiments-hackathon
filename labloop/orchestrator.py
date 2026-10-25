@@ -17,7 +17,9 @@ from typing import Any
 from labloop import catalog, pipeline
 from labloop.canonical import digest_document
 from labloop.dispatch import Dispatcher
+from labloop.events import Emit, Events, n, silent
 from labloop.grading import DomainGrader, grade
+from labloop.knowledge import KnowledgeStore, for_planner
 from labloop.memory import Memory
 from labloop.models import ModelError, Models, ask_json
 from labloop.research import research
@@ -156,21 +158,43 @@ class Loop:
             errors.append("skill must carry a name and at least one applies_when condition")
         return errors
 
-    def plan(self, task: dict[str, Any], run_id: str, findings: dict[str, Any], lessons: list[dict]) -> dict[str, Any]:
+    def plan(self, task: dict[str, Any], run_id: str, findings: dict[str, Any], lessons: list[dict],
+             emit: Emit = silent) -> dict[str, Any]:
         inputs = task.get("inputs", {})
+        cards = for_planner(KnowledgeStore(self.state.knowledge))
+        emit("start", f"Planner composing a pipeline from {n(len(catalog.available()), 'deployed tool')}, "
+                      f"{n(len(cards), 'tool knowledge card')} and {n(len(lessons), 'recalled lesson')}", phase="plan", key="planner")
         user = json.dumps({
             "task": task["description"],
             "inputs": {k: {"type": _schema_type(v), "preview": _preview(v)} for k, v in inputs.items()},
             "catalog": catalog.for_prompt(),
-            "literature": {"papers": findings.get("papers", []), "extractions": findings.get("extractions", [])},
+            "tool_knowledge": cards,
+            "literature": {
+                "papers": [{k: p.get(k) for k in ("title", "doi", "year", "citations", "text_source")}
+                           for p in findings.get("papers", [])],
+                "paperqa_answers": [{"question": a["question"], "answer": a["answer"],
+                                     "sources": sorted({c["citation"] for c in a["contexts"]})}
+                                    for a in ((findings.get("paperqa") or {}).get("answers") or [])],
+                "extraction": findings.get("extraction"),
+            },
             "advisory_lessons": [l["content"] for l in lessons],
         }, indent=1)
-        plan, _ = ask_json(self.models, "planner", user, run_id=run_id, max_tokens=8192,
-                           check=lambda p: self._plan_errors(p, inputs))
+        try:
+            plan, replies = ask_json(self.models, "planner", user, run_id=run_id, max_tokens=8192,
+                                     check=lambda p: self._plan_errors(p, inputs))
+        except ModelError as error:
+            emit("error", f"Planner failed: {str(error)[:300]}", phase="plan", key="planner")
+            raise
+        reference = sum(1 for c in plan["checks"] if "reference" in c)
+        emit("done", f"Planner drafted {' -> '.join(s['tool'] for s in plan['steps'])} with {n(len(plan['checks']), 'check')} "
+                     f"({reference} against published references)"
+                     + (f", after {len(replies) - 1} revision for validation errors" if len(replies) > 1 else ""),
+             phase="plan", key="planner", model=f"{replies[-1].provider}:{replies[-1].model}")
         return plan
 
     # -------------------------------------------------------------------- run
-    def execute(self, plan: dict[str, Any], inputs: dict[str, Any], run_id: str, run: RunDir) -> dict[str, dict]:
+    def execute(self, plan: dict[str, Any], inputs: dict[str, Any], run_id: str, run: RunDir,
+                emit: Emit = silent) -> dict[str, dict]:
         results: dict[str, dict[str, Any]] = {}
         for wave in pipeline.waves(plan["steps"]):
             calls, ready = [], []
@@ -181,9 +205,16 @@ class Loop:
                     results[step["id"]] = {"error": f"an upstream value is missing: {error}"}
                     run.append("EXPERIMENTS.jsonl", {"step_id": step["id"], "tool": step["tool"],
                                                      "status": "skipped", "error": results[step["id"]]["error"]})
+                    emit("error", f"{step['id']} ({step['tool']}) skipped: {results[step['id']]['error']}",
+                         phase="run", key=f"step:{step['id']}")
                     continue
                 calls.append((step["tool"], {**args, "run_id": run_id, "step_id": step["id"]}))
                 ready.append(step)
+            for step in ready:
+                gpu = catalog.CATALOG[step["tool"]].get("gpu") or "CPU"
+                emit("start", f"{step['id']}: {step['tool']} running on Modal ({gpu}, typically about "
+                              f"{catalog.CATALOG[step['tool']]['typical_runtime_s']} s)",
+                     phase="run", key=f"step:{step['id']}", tool=step["tool"], gpu=gpu)
             started = time.time()
             outcomes = self.dispatcher.run_wave(calls) if calls else []
             elapsed = round(time.time() - started, 2)
@@ -193,17 +224,23 @@ class Loop:
                     run.append("EXPERIMENTS.jsonl", {"step_id": step["id"], "tool": tool, "args": _preview(args),
                                                      "status": "error", "error": results[step["id"]]["error"],
                                                      "wave_seconds": elapsed})
+                    emit("error", f"{step['id']} failed after {elapsed:.0f} s: {results[step['id']]['error'][:300]}",
+                         phase="run", key=f"step:{step['id']}")
                 else:
                     results[step["id"]] = outcome
                     run.append("EXPERIMENTS.jsonl", {"step_id": step["id"], "tool": tool, "args": _preview(args),
                                                      "status": "ok", "result": _short(outcome),
                                                      "wave_seconds": elapsed})
+                    scores = ", ".join(f"{k} {v:.3g}" if isinstance(v, float) else f"{k} {v}"
+                                       for k, v in (outcome.get("scores") or {}).items())
+                    emit("done", f"{step['id']} finished in {elapsed:.0f} s: {scores or 'no scores'}",
+                         phase="run", key=f"step:{step['id']}")
             self.state.commit()
         return results
 
     # ------------------------------------------------------------------ learn
     def learn(self, task, run_id, plan, results, graded, decision, lessons_used, inputs_digest,
-              plan_digest) -> dict[str, Any]:
+              plan_digest, emit: Emit = silent) -> dict[str, Any]:
         verdict = graded["verdict"]
         lesson_ids, lesson_texts, review_error, summary = [], [], None, None
         user = json.dumps({
@@ -213,8 +250,10 @@ class Loop:
             "steps": {k: _short(v) for k, v in results.items()},
             "grading": {"verdict": verdict, "checks": graded["checks"]},
         }, indent=1, default=str)
+        emit("start", "Reviewer writing lessons from the graded run", phase="learn", key="reviewer")
         try:
-            review, _ = ask_json(self.models, "reviewer", user, run_id=run_id, max_tokens=2048,
+            # The reviewer may be a reasoning model that spends part of its budget before answering.
+            review, _ = ask_json(self.models, "reviewer", user, run_id=run_id, max_tokens=8192,
                                  check=lambda r: [] if isinstance(r, dict) and isinstance(r.get("lessons"), list)
                                  else ["lessons must be a list"])
             summary = str(review.get("summary") or "").strip() or None
@@ -228,8 +267,10 @@ class Loop:
                     text, lesson_type=kind, run_id=run_id,
                     metadata={"verdict": verdict, "tools": sorted({s["tool"] for s in plan["steps"]}),
                               "skill": decision.get("skill")}))
+            emit("done", f"Reviewer recorded {n(len(lesson_ids), 'lesson')}", phase="learn", key="reviewer")
         except ModelError as error:
             review_error = str(error)
+            emit("error", f"Reviewer failed: {review_error[:300]}", phase="learn", key="reviewer")
 
         # An inconclusive run is uninformative, so it records no outcome rather than a negative one.
         if verdict in ("PASS", "FAIL"):
@@ -253,6 +294,9 @@ class Loop:
                                        plan_digest=plan_digest, run_id=run_id)
             self.memory.mirror_skill(skill)
             skill_action = {"action": "created", "skill": skill["name"], "version": 1, "standing": standing(skill)}
+        if skill_action:
+            emit("info", f"Skill {skill_action['skill']} {'created' if skill_action['action'] == 'created' else 'given this run as evidence'}"
+                         f", standing {skill_action['standing']}", phase="learn")
         return {"lessons": lesson_ids, "lesson_texts": lesson_texts, "review_error": review_error,
                 "summary": summary, "skill": skill_action}
 
@@ -263,6 +307,8 @@ class Loop:
         task = {"description": str(task["description"]), "inputs": dict(task.get("inputs", {})),
                 **{k: v for k, v in task.items() if k not in ("description", "inputs")}}
         run = RunDir.create(self.state.run_dir(run_id), task)
+        emit = Events(run.path / "EVENTS.jsonl", self.state.commit).emit
+        emit("info", "Run accepted by the orchestrator on Modal")
         progress = {p: "todo" for p in PHASES}
 
         def phase(name: str, line: str, **fields) -> None:
@@ -277,7 +323,12 @@ class Loop:
         try:
             phase("match", "Matching the task against saved skills.")
             lessons = self.memory.context(task["description"], run_id=run_id, limit=5)
+            candidates = len(self.skills.list(include_retired=False))
+            emit("start", f"Recalled {n(len(lessons), 'lesson')}; checking {n(candidates, 'saved skill')}", phase="match",
+                 key="match")
             decision = self.match(task, run, run_id, lessons, force_skill)
+            emit("done", f"Reusing skill {decision['skill']}" if decision["decision"] == "reuse"
+                 else f"No saved skill fits: {str(decision.get('reason', ''))[:200]}", phase="match", key="match")
             run.append("DECISIONS.jsonl", {"kind": "match", **{k: v for k, v in decision.items()}})
 
             if decision["decision"] == "reuse":
@@ -295,11 +346,12 @@ class Loop:
                     raise ValueError(f"the saved skill no longer validates: {errors}")
             else:
                 phase("research", "Searching the literature for a procedure.")
-                findings = research(task, run=run, run_id=run_id, dispatcher=self.dispatcher, models=self.models)
-                if not findings["extractions"]:
+                findings = research(task, run=run, run_id=run_id, dispatcher=self.dispatcher, models=self.models,
+                                    emit=emit)
+                if not findings.get("extraction"):
                     run.assume("No literature procedure was extracted, so every planning choice is source-silent.")
                 phase("plan", "Composing a pipeline from the catalog.")
-                drafted = self.plan(task, run_id, findings, lessons)
+                drafted = self.plan(task, run_id, findings, lessons, emit)
                 inputs = {k: task["inputs"][k] for k in drafted["input_schema"]}
                 plan = {"origin": {"kind": "planned"}, **{k: drafted.get(k) for k in
                         ("skill", "input_schema", "steps", "checks", "sources", "decisions")}}
@@ -308,6 +360,7 @@ class Loop:
 
             phase("freeze", "Freezing the plan.")
             plan_digest = pipeline.freeze(run.path, plan)
+            emit("info", f"Plan and {n(len(plan['checks']), 'check')} frozen as sha-256 {plan_digest[:12]}", phase="freeze")
             inputs_digest = digest_document(inputs)
             run.write_json("inputs.json", {"inputs": inputs, "inputs_digest": inputs_digest}, once=True)
             for d in plan.get("decisions", []):
@@ -317,19 +370,22 @@ class Loop:
 
             phase("run", "Running the frozen pipeline on Modal.")
             frozen, digest = pipeline.load_frozen(run.path)
-            results = self.execute(frozen, inputs, run_id, run)
+            results = self.execute(frozen, inputs, run_id, run, emit)
 
             phase("grade", "Grading the frozen checks.")
             if self.artifacts_reload:
                 self.artifacts_reload()
             frozen, digest = pipeline.load_frozen(run.path)
             graded = grade(frozen, results, self.graders, self.artifacts_root)
+            for c in graded["checks"]:
+                emit("info", f"{c['id']}: {c['status']} ({c['metric']} observed {c.get('observed')})", phase="grade")
+            emit("info", f"Verdict {graded['verdict']}", phase="grade")
             run.write_json("RESULTS.json", {"run_id": run_id, "plan_digest": digest,
                                             "inputs_digest": inputs_digest, **graded}, once=True)
 
             phase("learn", f"Verdict {graded['verdict']}. Recording lessons.")
             learned = self.learn(task, run_id, frozen, results, graded, decision, lessons,
-                                 inputs_digest, digest)
+                                 inputs_digest, digest, emit)
             progress["learn"] = "done"
             findings_lines = [f"verdict {graded['verdict']}"] + [
                 f"{c['id']}: {c['status']} (observed {c.get('observed')})" for c in graded["checks"]]
@@ -339,8 +395,10 @@ class Loop:
                                 lessons=learned["lessons"], lesson_texts=learned["lesson_texts"],
                                 summary=learned["summary"], review_error=learned["review_error"],
                                 memory_errors=memory_errors[-5:])
+            emit("info", f"Run finished: {graded['verdict']}")
         except Exception as error:
             record = run.status("error", error=f"{type(error).__name__}: {error}",
                                 traceback=traceback.format_exc()[-4000:])
+            emit("error", f"Run stopped: {type(error).__name__}: {str(error)[:300]}")
         self.state.commit()
         return record

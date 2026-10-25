@@ -45,7 +45,7 @@ class StateRoot:
         self._commit = commit
         self._reload = reload
         if create:
-            for sub in ("runs", "skills", "memory"):
+            for sub in ("runs", "skills", "memory", "knowledge", "jobs"):
                 (self.root / sub).mkdir(parents=True, exist_ok=True)
 
     @property
@@ -55,6 +55,14 @@ class StateRoot:
     @property
     def skills(self) -> Path:
         return self.root / "skills"
+
+    @property
+    def jobs(self) -> Path:
+        return self.root / "jobs"
+
+    @property
+    def knowledge(self) -> Path:
+        return self.root / "knowledge"
 
     @property
     def memory(self) -> Path:

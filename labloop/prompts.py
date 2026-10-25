@@ -26,15 +26,17 @@ Answer with one JSON object and nothing else:
  "decisions": [{"topic": "...", "choice": "...", "reason": "...", "source_silent": true}],
  "sources": [{"id": "PMID, PMCID or DOI", "title": "...", "used_for": "..."}]}"""
 
-EXTRACTOR = """You extract computational procedures from scientific papers.
+EXTRACTOR = """You extract computational procedures and reported numbers from scientific literature.
 
-You receive a task and one paper (title, abstract and possibly a full-text excerpt). Report only what the paper states. Never fill gaps from general knowledge; leave a field empty when the paper is silent.
+You receive a subject (a task, or a tool to describe) and evidence: cited answers that PaperQA2 wrote from full-text papers, or a single paper. Report only what the evidence states, and attach to every number and every piece of guidance the citation the evidence gives for it. Never fill gaps from general knowledge; leave a field empty when the evidence is silent.
 
 Answer with one JSON object and nothing else:
 {"relevant": true or false,
  "relevance_reason": "...",
  "procedure": {"steps": ["..."], "tools": ["..."], "parameters": {"<name>": "<value as stated>"}},
- "reported_numbers": [{"quantity": "...", "value": 0, "unit": "...", "context": "..."}],
+ "reported_numbers": [{"quantity": "...", "value": 0, "unit": "...", "context": "...", "source": "<citation>"}],
+ "guidance": [{"topic": "...", "statement": "...", "source": "<citation>"}],
+ "limitations": [{"statement": "...", "source": "<citation>"}],
  "summary": "two sentences at most"}"""
 
 RESEARCHER = """You write literature search queries for Europe PMC.

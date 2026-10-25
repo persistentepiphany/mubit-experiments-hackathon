@@ -22,19 +22,20 @@ def _probe(args) -> int:
     for role in ROLE_DEFAULTS:
         targets.setdefault(role_target(role), []).append(role)
     if os.environ.get("MOONSHOT_API_KEY"):
-        targets.setdefault(("moonshot", os.environ.get("LABLOOP_KIMI_MODEL", "kimi-k3[1m]")), []).append("probe")
+        targets.setdefault(("moonshot", os.environ.get("LABLOOP_KIMI_MODEL", "kimi-k3[1m]"), None), []).append("probe")
     models = AnthropicModels()
     failures = 0
-    for (provider, model), roles in targets.items():
+    for (provider, model, effort), roles in targets.items():
         try:
             client = models._client(provider)
-            reply = client.messages.create(model=model, max_tokens=256,
+            extra = {"output_config": {"effort": effort}} if effort else {}
+            reply = client.messages.create(model=model, max_tokens=2048, **extra,
                                            messages=[{"role": "user", "content": "Reply with the single word ok."}])
             text = "".join(b.text for b in reply.content if getattr(b, "type", "") == "text").strip()
-            print(f"OK   {provider}:{model} roles={roles} served={reply.model} text={text[:40]!r}")
+            print(f"OK   {provider}:{model}{'@' + effort if effort else ''} roles={roles} served={reply.model} text={text[:40]!r}")
         except (ModelError, Exception) as error:
             failures += 1
-            print(f"FAIL {provider}:{model} roles={roles} {type(error).__name__}: {str(error)[:200]}")
+            print(f"FAIL {provider}:{model}{'@' + effort if effort else ''} roles={roles} {type(error).__name__}: {str(error)[:200]}")
     missing = [p for p, cfg in PROVIDERS.items() if not any(os.environ.get(k) for k in cfg["key_env"])]
     if missing:
         print(f"no key for: {', '.join(missing)}")

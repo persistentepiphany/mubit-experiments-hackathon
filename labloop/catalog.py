@@ -20,6 +20,8 @@ CHAIN_LIST = {
 
 CATALOG: dict[str, dict[str, Any]] = {
     "esmfold": {
+        "title": "ESMFold",
+        "papers": ['10.1126/science.ade2574', '10.1101/2022.07.20.500902'],
         "kind": "model",
         "purpose": "Fast single-chain protein structure prediction from sequence, without MSAs.",
         "inputs": {
@@ -35,6 +37,8 @@ CATALOG: dict[str, dict[str, Any]] = {
         "notes": "mean_plddt is on a 0 to 100 scale. Monomers only.",
     },
     "boltz2": {
+        "title": "Boltz-2",
+        "papers": ['10.1101/2025.06.14.659707', '10.1101/2024.11.19.624167'],
         "kind": "model",
         "purpose": "Biomolecular complex structure prediction (Boltz-2), including protein-protein co-folding.",
         "inputs": {
@@ -55,6 +59,8 @@ CATALOG: dict[str, dict[str, Any]] = {
         "notes": "complex_plddt is on a 0 to 1 scale. iptm is only meaningful with two or more chains.",
     },
     "chai1": {
+        "title": "Chai-1",
+        "papers": ['10.1101/2024.10.10.615955'],
         "kind": "model",
         "purpose": "Biomolecular complex structure prediction (Chai-1), an independent second opinion to Boltz-2.",
         "inputs": {
@@ -91,11 +97,12 @@ CATALOG: dict[str, dict[str, Any]] = {
         "inputs": {"pdb_id": {"type": "string", "required": True, "description": "e.g. 1CRN"}},
         "scores": ["n_atoms", "n_chains"],
         "artifacts": ["structure"],
-        "data": ["chains"],
+        "data": ["chains", "first_chain_id", "first_chain_sequence"],
         "gpu": None,
         "typical_runtime_s": 3,
         "available": True,
-        "notes": "data.chains maps chain id to one-letter sequence read from ATOM records.",
+        "notes": "data.chains maps chain id to one-letter sequence read from ATOM records; chain ids are not known "
+                 "before the fetch, so feed a single-chain step from data.first_chain_sequence (a plain string).",
     },
     "literature_search": {
         "kind": "data",
@@ -113,7 +120,22 @@ CATALOG: dict[str, dict[str, Any]] = {
         "available": True,
         "notes": "Used by the research step; rarely useful inside a pipeline.",
     },
+    "literature_corpus": {
+        "kind": "research", "purpose": "Build and freeze a literature corpus with the harness-experiments fetcher.",
+        "inputs": {"queries": {"type": "array", "required": True, "description": "Europe PMC queries"}},
+        "scores": ["n_documents", "n_full_text", "searched"], "artifacts": ["corpus"], "data": ["documents"],
+        "gpu": None, "typical_runtime_s": 30, "available": True, "notes": "Research step only.",
+    },
+    "paperqa": {
+        "kind": "research", "purpose": "Answer questions over frozen corpora with PaperQA2.",
+        "inputs": {"corpora": {"type": "array", "required": True, "description": "corpus directories"},
+                   "questions": {"type": "array", "required": True, "description": "questions"}},
+        "scores": ["n_documents", "n_answers", "cost_usd"], "artifacts": ["answers"], "data": ["answers"],
+        "gpu": None, "typical_runtime_s": 120, "available": True, "notes": "Research step only.",
+    },
     "colabfold": {
+        "title": "ColabFold",
+        "papers": ['10.1038/s41592-022-01488-1'],
         "kind": "model",
         "purpose": "AlphaFold2 and AlphaFold-Multimer prediction with MMseqs2 MSAs (ColabFold).",
         "inputs": {"chains": {**CHAIN_LIST, "required": True}, "seed": {"type": "integer", "required": False, "description": "default 0"}},
@@ -126,6 +148,8 @@ CATALOG: dict[str, dict[str, Any]] = {
         "notes": "Not deployed; the image has not been built and verified.",
     },
     "proteinmpnn": {
+        "title": "ProteinMPNN",
+        "papers": ['10.1126/science.add2187', '10.1101/2022.06.03.494563'],
         "kind": "model",
         "purpose": "Design sequences for a given protein backbone (ProteinMPNN).",
         "inputs": {
@@ -142,15 +166,21 @@ CATALOG: dict[str, dict[str, Any]] = {
         "available": False,
         "notes": "Not deployed until the first three model tools are verified.",
     },
-    "rfdiffusion": {"kind": "model", "purpose": "Backbone generation (RFdiffusion).", "inputs": {}, "scores": [], "artifacts": [], "data": [], "gpu": "A100", "typical_runtime_s": 600, "available": False, "notes": "Optional; not deployed."},
-    "diffdock": {"kind": "model", "purpose": "Protein-ligand docking (DiffDock).", "inputs": {}, "scores": [], "artifacts": [], "data": [], "gpu": "A10G", "typical_runtime_s": 300, "available": False, "notes": "Optional; not deployed."},
-    "protenix": {"kind": "model", "purpose": "AF3-class complex prediction (Protenix).", "inputs": {}, "scores": [], "artifacts": [], "data": [], "gpu": "H100", "typical_runtime_s": 600, "available": False, "notes": "Optional; not deployed."},
-    "alphafold3": {"kind": "model", "purpose": "AlphaFold 3 complex prediction.", "inputs": {}, "scores": [], "artifacts": [], "data": [], "gpu": "H100", "typical_runtime_s": 900, "available": False, "notes": "Stub; weights are available only on request from Google DeepMind."},
+    "rfdiffusion": {"title": "RFdiffusion", "papers": ['10.1038/s41586-023-06415-8'], "kind": "model", "purpose": "Backbone generation (RFdiffusion).", "inputs": {}, "scores": [], "artifacts": [], "data": [], "gpu": "A100", "typical_runtime_s": 600, "available": False, "notes": "Optional; not deployed."},
+    "diffdock": {"title": "DiffDock", "papers": [], "kind": "model", "purpose": "Protein-ligand docking (DiffDock).", "inputs": {}, "scores": [], "artifacts": [], "data": [], "gpu": "A10G", "typical_runtime_s": 300, "available": False, "notes": "Optional; not deployed."},
+    "protenix": {"title": "Protenix", "papers": ['10.1101/2025.01.08.631967'], "kind": "model", "purpose": "AF3-class complex prediction (Protenix).", "inputs": {}, "scores": [], "artifacts": [], "data": [], "gpu": "H100", "typical_runtime_s": 600, "available": False, "notes": "Optional; not deployed."},
+    "alphafold3": {"title": "AlphaFold 3", "papers": ['10.1038/s41586-024-07487-w'], "kind": "model", "purpose": "AlphaFold 3 complex prediction.", "inputs": {}, "scores": [], "artifacts": [], "data": [], "gpu": "H100", "typical_runtime_s": 900, "available": False, "notes": "Stub; weights are available only on request from Google DeepMind."},
 }
 
 
 def available() -> dict[str, dict[str, Any]]:
-    return {name: entry for name, entry in CATALOG.items() if entry["available"]}
+    """Tools a pipeline may use. Research-only tools are deployed but never offered to the planner."""
+    return {name: entry for name, entry in CATALOG.items() if entry["available"] and entry["kind"] != "research"}
+
+
+def with_papers() -> dict[str, dict[str, Any]]:
+    """Model tools whose method papers are ingested as tool knowledge, deployed or not."""
+    return {name: entry for name, entry in CATALOG.items() if entry.get("papers")}
 
 
 def output_fields(tool: str) -> set[str]:

@@ -45,11 +45,24 @@ def test_first_task_plans_runs_grades_and_saves_a_skill(tmp_path):
     assert [e["step_id"] for e in experiments] == ["fold"]
     decisions = [json.loads(l) for l in (run / "DECISIONS.jsonl").read_text().splitlines()]
     assert any(d.get("source_silent") for d in decisions)
-    assert (run / "research" / "corpus" / "manifest.json").exists()
+    research = json.loads((run / "research" / "extractions.json").read_text())
+    assert research["corpus"]["manifest_sha256"] and research["papers"][0]["citations"] == 5540
+    assert research["paperqa"]["corpora"][-1].startswith("seed/") and research["extraction"]["reported_numbers"]
+    assert [c for c, _ in dispatcher.calls[:2]] == ["literature_corpus", "paperqa"]
+    from labloop.events import in_flight, read
+
+    events = read(run / "EVENTS.jsonl")
+    keys = [(e["kind"], e.get("key")) for e in events if e.get("key")]
+    for key in ("match", "corpus", "paperqa", "planner", "step:fold", "reviewer"):
+        assert ("start", key) in keys and ("done", key) in keys, key
+    assert in_flight(events) == [] and events[-1]["message"] == "Run finished: PASS"
+    assert any("fold finished in" in e["message"] and "mean_plddt 82.5" in e["message"] for e in events)
     skill = SkillStore(loop.state.skills).get("esmfold_monomer_confidence")
     assert standing(skill) == "draft"
     assert [c["role"] for c in models.calls] == ["researcher", "extractor", "planner", "reviewer"]
-    assert dispatcher.calls[0] == ("literature_search", {**dispatcher.calls[0][1], "query": '"ESMFold" AND pLDDT'})
+    assert dispatcher.calls[0][1]["queries"] == ['"ESMFold" AND pLDDT']
+    planner_input = json.loads(models.calls[2]["user"])
+    assert planner_input["literature"]["extraction"]["reported_numbers"][0]["value"] == 70
     assert dispatcher.calls[-1][0] == "esmfold" and dispatcher.calls[-1][1]["run_id"] == record["run_id"]
 
 
