@@ -35,7 +35,8 @@ class SkillRunIn(BaseModel):
     description: str | None = None
 
 
-def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str | None]) -> FastAPI:
+def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str | None],
+               refresh_knowledge: Callable[[list[str] | None], str] | None = None) -> FastAPI:
     """`call_state(run_id)` is None for an unknown run, "queued" for a submitted run that has not
     written state yet, and an error message for a submitted run whose orchestrator call failed."""
     app = FastAPI(title="labloop", version="0.1.0")
@@ -93,6 +94,25 @@ def create_app(state: StateRoot, submit: Submit, call_state: Callable[[str], str
             "results": run.read_json("RESULTS.json"),
             "research": run.read_json("research/extractions.json"),
         }
+
+    @app.get("/knowledge")
+    def knowledge() -> dict[str, Any]:
+        state.reload()
+        from labloop.knowledge import KnowledgeStore
+
+        cards = KnowledgeStore(state.knowledge).all()
+        return {"tools": [{"tool": c["tool"], "title": c.get("title"), "deployed": c.get("deployed"),
+                           "summary": c.get("summary"), "version": c.get("version"),
+                           "ingested_at": c.get("ingested_at"), "papers": c.get("papers", []),
+                           "papers_missing": c.get("papers_missing", []), "guidance": c.get("guidance", []),
+                           "reported_numbers": c.get("reported_numbers", []),
+                           "limitations": c.get("limitations", [])} for c in cards]}
+
+    @app.post("/knowledge/refresh", status_code=202)
+    def refresh(tools: list[str] | None = None) -> dict[str, Any]:
+        if refresh_knowledge is None:
+            raise HTTPException(501, "knowledge refresh is not configured here")
+        return {"call": refresh_knowledge(tools), "phase": "queued"}
 
     @app.get("/skills")
     def list_skills(include_retired: bool = False) -> dict[str, Any]:

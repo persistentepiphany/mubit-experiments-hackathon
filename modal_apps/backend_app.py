@@ -25,6 +25,9 @@ state_volume = modal.Volume.from_name("labloop-state", create_if_missing=True)
 artifacts_volume = modal.Volume.from_name("labloop-artifacts", create_if_missing=True)
 calls = modal.Dict.from_name("labloop-calls", create_if_missing=True)
 keys = modal.Secret.from_name("labloop-keys")
+# Per-role model overrides (LABLOOP_MODEL_<ROLE>, LABLOOP_PAPERQA_LLM, ...). Edit this secret to reroute
+# every role without a code change.
+routing = modal.Secret.from_name("labloop-routing")
 
 image = (
     modal.Image.debian_slim(python_version="3.12")
@@ -39,7 +42,7 @@ if _ppi and Path(_ppi).is_dir():
 image = image.add_local_python_source("labloop", ignore=["**/__pycache__/**", "**/*.pyc"])
 
 
-@app.function(image=image, volumes={STATE: state_volume, ARTIFACTS: artifacts_volume}, secrets=[keys],
+@app.function(image=image, volumes={STATE: state_volume, ARTIFACTS: artifacts_volume}, secrets=[keys, routing],
               timeout=3 * 60 * 60, max_containers=1)
 def orchestrate(task: dict, run_id: str, force_skill: str | None = None) -> dict:
     from labloop import memory
@@ -55,6 +58,37 @@ def orchestrate(task: dict, run_id: str, force_skill: str | None = None) -> dict
                 memory=memory.from_env(state.memory), graders=default_graders(),
                 artifacts_root=ARTIFACTS, artifacts_reload=artifacts_volume.reload)
     return loop.run_task(task, run_id=run_id, force_skill=force_skill)
+
+
+@app.function(image=image, volumes={STATE: state_volume}, secrets=[keys, routing], timeout=2 * 60 * 60,
+              max_containers=1)
+def ingest_knowledge(tools: list[str] | None = None) -> list[dict]:
+    """Read every catalogued model's method papers on Modal and store a knowledge card per tool."""
+    import time
+
+    from labloop import catalog, memory
+    from labloop.dispatch import ModalDispatcher
+    from labloop.knowledge import KnowledgeStore, ingest
+    from labloop.models import AnthropicModels
+    from labloop.state import StateRoot
+
+    state_volume.reload()
+    state = StateRoot(STATE, commit=state_volume.commit, reload=state_volume.reload)
+    mem = memory.from_env(state.memory)
+    reports = ingest(tools or sorted(catalog.with_papers()), store=KnowledgeStore(state.knowledge),
+                     dispatcher=ModalDispatcher(), models=AnthropicModels(), memory=mem,
+                     run_id=time.strftime("knowledge-%Y%m%d-%H%M%S", time.gmtime()))
+    for report in reports:
+        report["memory_errors"] = list(getattr(mem, "errors", []))[-3:]
+    state_volume.commit()
+    return reports
+
+
+@app.local_entrypoint()
+def ingest(tools: str = "") -> None:
+    import json
+
+    print(json.dumps(ingest_knowledge.remote([t for t in tools.split(",") if t] or None), indent=1))
 
 
 @app.function(image=image, volumes={STATE: state_volume}, max_containers=1)
@@ -98,4 +132,7 @@ def api():
             return f"the orchestrator call failed before writing state: {type(error).__name__}: {error}"
         return "the orchestrator call finished without writing state"
 
-    return create_app(state, submit, call_state)
+    def refresh_knowledge(tools: list[str] | None) -> str:
+        return ingest_knowledge.spawn(tools).object_id
+
+    return create_app(state, submit, call_state, refresh_knowledge)
