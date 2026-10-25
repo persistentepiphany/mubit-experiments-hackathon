@@ -62,24 +62,45 @@ def orchestrate(task: dict, run_id: str, force_skill: str | None = None) -> dict
 
 @app.function(image=image, volumes={STATE: state_volume}, secrets=[keys, routing], timeout=2 * 60 * 60,
               max_containers=1)
-def ingest_knowledge(tools: list[str] | None = None) -> list[dict]:
+def ingest_knowledge(tools: list[str] | None = None, job_id: str | None = None) -> list[dict]:
     """Read every catalogued model's method papers on Modal and store a knowledge card per tool."""
+    import secrets
     import time
 
     from labloop import catalog, memory
     from labloop.dispatch import ModalDispatcher
+    from labloop.events import Events
     from labloop.knowledge import KnowledgeStore, ingest
     from labloop.models import AnthropicModels
-    from labloop.state import StateRoot
+    from labloop.state import RunDir, StateRoot
 
     state_volume.reload()
     state = StateRoot(STATE, commit=state_volume.commit, reload=state_volume.reload)
+    job_id = job_id or time.strftime("j-%Y%m%d-%H%M%S-", time.gmtime()) + secrets.token_hex(3)
+    job = RunDir(state.jobs / job_id)
+    job.path.mkdir(parents=True, exist_ok=True)
+    tools = tools or sorted(catalog.with_papers())
+    started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    job.write_json("job.json", {"kind": "knowledge", "phase": "running", "tools": tools, "started_at": started})
+    emit = Events(job.path / "EVENTS.jsonl", state_volume.commit).emit
+    emit("info", f"Knowledge refresh started for {len(tools)} tools: {', '.join(tools)}")
     mem = memory.from_env(state.memory)
-    reports = ingest(tools or sorted(catalog.with_papers()), store=KnowledgeStore(state.knowledge),
-                     dispatcher=ModalDispatcher(), models=AnthropicModels(), memory=mem,
-                     run_id=time.strftime("knowledge-%Y%m%d-%H%M%S", time.gmtime()))
-    for report in reports:
-        report["memory_errors"] = list(getattr(mem, "errors", []))[-3:]
+    try:
+        reports = ingest(tools, store=KnowledgeStore(state.knowledge), dispatcher=ModalDispatcher(),
+                         models=AnthropicModels(), memory=mem, run_id=job_id, emit=emit)
+        errors = list(getattr(mem, "errors", []))
+        if errors:
+            emit("info", f"Mubit memory and skill writes were refused ({len(errors)} times); cards and lessons are "
+                         f"kept on the state Volume. Last error: {errors[-1][:160]}")
+        job.write_json("job.json", {"kind": "knowledge", "phase": "done", "tools": tools, "started_at": started,
+                                    "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                    "reports": reports, "mubit_errors": errors[-3:]})
+        emit("info", f"Knowledge refresh finished: {sum(1 for r in reports if 'version' in r)} of {len(tools)} cards saved")
+    except Exception as error:
+        job.write_json("job.json", {"kind": "knowledge", "phase": "error", "tools": tools, "started_at": started,
+                                    "error": f"{type(error).__name__}: {error}"})
+        emit("error", f"Knowledge refresh stopped: {type(error).__name__}: {str(error)[:300]}")
+        raise
     state_volume.commit()
     return reports
 
@@ -133,6 +154,11 @@ def api():
         return "the orchestrator call finished without writing state"
 
     def refresh_knowledge(tools: list[str] | None) -> str:
-        return ingest_knowledge.spawn(tools).object_id
+        import secrets
+        import time
+
+        job_id = time.strftime("j-%Y%m%d-%H%M%S-", time.gmtime()) + secrets.token_hex(3)
+        ingest_knowledge.spawn(tools, job_id)
+        return job_id
 
     return create_app(state, submit, call_state, refresh_knowledge)
