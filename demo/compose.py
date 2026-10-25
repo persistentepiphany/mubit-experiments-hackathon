@@ -7,7 +7,8 @@
    (github.com/webadderallorg/recordly): the capture sits on one of Recordly's
    wallpapers, blurred, with padding, rounded corners and a shadow. Explainer
    scenes are already full frame.
-3. Join the clips with crossfades and level the audio.
+3. Tighten long silent stretches, join the clips with crossfades, and level
+   the audio.
 
     python3 demo/compose.py <demo-out/light> <wallpaper.jpg> <out.mp4>
 """
@@ -25,6 +26,8 @@ TOUR = ["viz-intro", "viz-mubit", "task", "run1", "lesson", "viz-memory", "run2"
 FADE = 0.7          # seconds of crossfade between clips
 GAP = 0.08          # the least silence allowed between two lines
 LEAD = 0.35         # silence kept between a transition and the nearest line
+MAX_GAP = 1.4       # a silent stretch longer than this is played faster...
+MAX_SPEED = 3.0     # ...but never more than this much faster
 RADIUS, SHADOW_BLUR, SHADOW_OFFSET, SHADOW_ALPHA = 22, 34, 18, 120
 
 
@@ -48,6 +51,46 @@ def check_narration(clips: list[Path]) -> list[str]:
     return problems
 
 
+def lines_of(clip: Path) -> list[dict]:
+    return sorted(json.loads(clip.with_suffix(".lines.json").read_text()), key=lambda l: l["at"])
+
+
+def tighten(clip: Path, out: Path) -> None:
+    """Plays each long silent stretch faster, leaving every spoken line at its own pace.
+
+    Between lines a scene scrolls, clicks and waits for the page, and on film
+    those stretches read as dead air. Each one longer than MAX_GAP is sped up
+    to last MAX_GAP, at most MAX_SPEED times faster. The new narration
+    timeline is written beside the output.
+    """
+    lines = lines_of(clip)
+    seconds = probe(clip)[2]
+    cuts, at = [], 0.0
+    for line in lines:
+        cuts.append((at, line["at"], False))
+        cuts.append((line["at"], min(seconds, line["at"] + line["seconds"]), True))
+        at = line["at"] + line["seconds"]
+    cuts.append((at, seconds, False))
+    parts, labels, moved, now = [], [], [], 0.0
+    for i, (start, end, spoken) in enumerate(c for c in cuts if c[1] - c[0] > 0.01):
+        length = end - start
+        new = length if spoken or length <= MAX_GAP else max(MAX_GAP, length / MAX_SPEED)
+        factor = new / length
+        parts.append(f"[0:v]trim=start={start:.3f}:end={end:.3f},setpts=(PTS-STARTPTS)*{factor:.5f}[v{i}]")
+        parts.append(f"[0:a]atrim=start={start:.3f}:end={start + new:.3f},asetpts=PTS-STARTPTS[a{i}]")
+        labels.append(f"[v{i}][a{i}]")
+        if spoken:
+            moved.append({**next(l for l in lines if abs(l["at"] - start) < 1e-6), "at": now})
+        now += new
+    parts.append(f"{''.join(labels)}concat=n={len(labels)}:v=1:a=1[v][a]")
+    subprocess.run([
+        "ffmpeg", "-y", "-v", "error", "-i", str(clip), "-filter_complex", ";".join(parts),
+        "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "14",
+        "-r", "60", "-c:a", "aac", "-b:a", "256k", str(out),
+    ], check=True)
+    out.with_suffix(".lines.json").write_text(json.dumps(moved, indent=2))
+
+
 def padding(clip: Path) -> tuple[float, float]:
     """Seconds of held frame and silence to add before and after a clip.
 
@@ -55,7 +98,7 @@ def padding(clip: Path) -> tuple[float, float]:
     ends on a still screen stops right after its last word. Padding both ends
     puts every transition over silence.
     """
-    lines = sorted(json.loads(clip.with_suffix(".lines.json").read_text()), key=lambda l: l["at"])
+    lines = lines_of(clip)
     seconds = probe(clip)[2]
     if not lines:
         return 0.0, 0.0
@@ -133,8 +176,10 @@ def main(corpus: Path, wallpaper: Path, out: Path) -> None:
         tmp = Path(tmp_dir)
         ready = []
         for clip in clips:
+            tight = tmp / f"{clip.stem}.mp4"
+            tighten(clip, tight)
             prepared = tmp / f"{clip.stem}.prepared.mp4"
-            prepare(clip, wallpaper, prepared, tmp)
+            prepare(tight, wallpaper, prepared, tmp)
             ready.append(prepared)
         stitch(ready, out)
     print(f"compose: {out} ({probe(out)[2]:.1f}s)")
