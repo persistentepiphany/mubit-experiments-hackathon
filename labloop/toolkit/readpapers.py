@@ -2,7 +2,8 @@
 
 PaperQA2 routes every model call through LiteLLM. Here LiteLLM speaks the
 Anthropic Messages format through the Mubit gateway (`mubit:<model>`), so the
-summary and answer calls are recorded by the gateway like every other call.
+summary and answer calls are recorded by the gateway like every other call, or
+directly to Z.AI (`zai:<model>`) when the routing secret says so.
 Embeddings are a local
 sentence-transformers model, because the gateway serves embeddings only in the
 OpenAI format. The configuration sends no `temperature`, which the Anthropic
@@ -17,7 +18,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-PROVIDERS = {"mubit": ("https://api.mubit.ai/anthropic", ("MUBIT_API_KEY", "MUBIT_API_TOKEN"))}
+PROVIDERS = {"mubit": ("https://api.mubit.ai/anthropic", ("MUBIT_API_KEY", "MUBIT_API_TOKEN")),
+             "zai": ("https://api.z.ai/api/anthropic", ("ZAI_API_KEY",))}
 EMBEDDING = "st-multi-qa-MiniLM-L6-cos-v1"
 
 

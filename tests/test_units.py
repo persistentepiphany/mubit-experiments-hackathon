@@ -116,6 +116,8 @@ def test_role_spec_carries_an_optional_effort(monkeypatch):
     assert role_target("planner") == ("mubit", "claude-opus-5", "high")
     monkeypatch.setenv("LABLOOP_MODEL_PLANNER", "mubit:claude-sonnet-5-5")
     assert role_target("planner") == ("mubit", "claude-sonnet-5-5", None)
+    monkeypatch.setenv("LABLOOP_MODEL_PLANNER", "zai:glm-5.1")
+    assert role_target("planner") == ("zai", "glm-5.1", None)
     monkeypatch.setenv("LABLOOP_MODEL_PLANNER", "other:some-model")
     with pytest.raises(ModelError):
         role_target("planner")

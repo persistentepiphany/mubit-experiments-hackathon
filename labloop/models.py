@@ -22,6 +22,7 @@ from labloop import prompts
 
 PROVIDERS: dict[str, dict[str, Any]] = {
     "mubit": {"base_url": "https://api.mubit.ai/anthropic", "key_env": ("MUBIT_API_KEY", "MUBIT_API_TOKEN")},
+    "zai": {"base_url": "https://api.z.ai/api/anthropic", "key_env": ("ZAI_API_KEY",)},
 }
 
 ROLE_DEFAULTS = {
@@ -32,6 +33,9 @@ ROLE_DEFAULTS = {
     "reviewer": "mubit:claude-opus-4-8@high",
     "corrector": "mubit:claude-haiku-5-5",
 }
+
+# GLM models that always reason; the rest take `thinking: disabled` and answer directly.
+ZAI_ALWAYS_THINKS = {"glm-5.3"}
 
 # List prices in USD per million input and output tokens, for the cost column of the call ledger.
 # A model missing here has its cost left blank rather than guessed; LABLOOP_PRICE_<MODEL> ("in,out")
@@ -154,7 +158,16 @@ class AnthropicModels:
         provider, model, effort = role_target(role)
         started = time.time()
         try:
-            reply = self._complete(role, user, run_id, provider, model, effort, max_tokens)
+            try:
+                reply = self._complete(role, user, run_id, provider, model, effort, max_tokens)
+            except ModelError as error:
+                fallback = os.environ.get("LABLOOP_ZAI_FALLBACK", "glm-5.1")
+                if provider != "zai" or model == fallback or "tokens before answering" not in str(error):
+                    raise
+                # A reasoning model spent its whole budget thinking; ask a model that answers directly.
+                self.ledger.record(role, run_id, provider, model, started, ok=False, error=str(error)[:200])
+                started, model = time.time(), fallback
+                reply = self._complete(role, user, run_id, provider, model, effort, max_tokens)
         except Exception as error:
             self.ledger.record(role, run_id, provider, model, started, ok=False,
                                error=f"{type(error).__name__}: {str(error)[:200]}")
@@ -167,11 +180,19 @@ class AnthropicModels:
         kwargs: dict[str, Any] = {}
         if provider == "mubit":
             kwargs["metadata"] = {"user_id": run_id}  # the gateway's session key on Anthropic calls
-        if effort:
+        if effort and provider != "zai":
             kwargs["output_config"] = {"effort": effort}
             max_tokens = max(max_tokens, 16000)  # thinking at higher effort shares this budget with the answer
+        if provider == "zai":
+            if model in ZAI_ALWAYS_THINKS:
+                # These cannot turn reasoning off; a capped budget and a large limit leave room for the answer.
+                max_tokens = max(max_tokens, 64000)
+                kwargs["thinking"] = {"type": "enabled",
+                                      "budget_tokens": int(os.environ.get("LABLOOP_ZAI_THINKING_BUDGET", "16000"))}
+            else:
+                kwargs["thinking"] = {"type": "disabled"}
         messages = self._client(provider).messages
-        if model in FALLBACK_MODELS:
+        if provider != "zai" and model in FALLBACK_MODELS:
             messages = self._client(provider).beta.messages
             kwargs.update(betas=[FALLBACK_BETA], fallbacks="default")
         # Streamed, because large budgets exceed the SDK's limit for a single blocking request.
