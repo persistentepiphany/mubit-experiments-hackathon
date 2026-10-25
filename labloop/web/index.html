@@ -343,7 +343,7 @@ function phaseDetail(key, d){
   return {};
 }
 function shortModel(spec){
-  const [model, effort] = String(spec||'').replace(/^[a-z]+:/,'').split('@');
+  const [model, effort] = String(spec||'').replace(/^[a-z-]+:/,'').split('@');
   const parts = model.split('-'), tail = effort ? ' · ' + effort : '';
   // "family-major-minor" ids read as "Family major.minor"; others, such as "gpt-5.6-terra", as "GPT 5.6 Terra".
   if (parts.length > 1 && /^[a-z]+$/.test(parts[1])) { const [, family, ...ver] = parts; return `${family[0].toUpperCase()}${family.slice(1)} ${ver.join('.')}${tail}`; }
