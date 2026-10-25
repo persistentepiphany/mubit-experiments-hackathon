@@ -16,7 +16,7 @@ Live at **https://persistentepiphany--labloop-backend-api.us-east.modal.run** (A
 | Use of Mubit | Every model call goes through the Mubit gateway and is recorded, PaperQA2's included. The run page shows each phase's Mubit calls as they happen. | [How Mubit is used](#how-mubit-is-used) | Gateway verified; `api.mubit.ai` does not serve the SDK memory routes |
 
 <table><tr>
-<td width="50%"><img src="docs/screenshots/learning.png" alt="Learning page with Mubit corrections, the re-runs they produced, roles on Mubit and refresh charts"><br><sub>Learning page from live state.</sub></td>
+<td width="50%"><img src="docs/screenshots/learning.png" alt="Learning page with Mubit corrections, the re-runs they produced, roles on Mubit and refresh charts"><br><sub>Learning page.</sub></td>
 <td width="50%"><img src="docs/screenshots/run-correction.png" alt="A failed run and the planner rule its correction became"><br><sub>A failed run and the rule its correction became.</sub></td>
 </tr></table>
 
