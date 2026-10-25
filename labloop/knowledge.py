@@ -22,6 +22,7 @@ from typing import Any
 
 from labloop import catalog
 from labloop.dispatch import Dispatcher
+from labloop.events import Emit, silent
 from labloop.memory import Memory
 from labloop.models import ModelError, Models
 from labloop.research import SEED_CORPORA, limits, structure
@@ -73,14 +74,23 @@ def for_planner(store: KnowledgeStore) -> list[dict[str, Any]]:
 
 
 def ingest(tools: list[str], *, store: KnowledgeStore, dispatcher: Dispatcher, models: Models, memory: Memory,
-           run_id: str) -> list[dict[str, Any]]:
+           run_id: str, emit: Emit = silent) -> list[dict[str, Any]]:
     """Ingest the method papers of each named tool. Returns one report per tool."""
     cap = limits()
     entries = {t: catalog.CATALOG[t] for t in tools if catalog.CATALOG.get(t, {}).get("papers")}
     calls = [("literature_corpus", {"queries": [" OR ".join(f'DOI:"{d}"' for d in e["papers"])],
                                     "page_size": 25, "max_docs": len(e["papers"]) + 2,
                                     "run_id": run_id, "step_id": f"knowledge_{t}"}) for t, e in entries.items()]
+    for tool, entry in entries.items():
+        emit("start", f"{entry['title']}: fetching {len(entry['papers'])} method papers on Modal", key=f"corpus:{tool}")
     built = dict(zip(entries, dispatcher.run_wave(calls)))
+    for tool, outcome in built.items():
+        if isinstance(outcome, BaseException):
+            emit("error", f"{entries[tool]['title']}: corpus failed: {str(outcome)[:200]}", key=f"corpus:{tool}")
+        else:
+            sc = outcome["scores"]
+            emit("done", f"{entries[tool]['title']}: {sc['n_documents']} papers frozen ({sc['n_full_text']} full text)",
+                 key=f"corpus:{tool}")
     read_calls, order = [], []
     for tool, outcome in built.items():
         corpora = list(SEED_CORPORA)
@@ -94,7 +104,16 @@ def ingest(tools: list[str], *, store: KnowledgeStore, dispatcher: Dispatcher, m
                                        "evidence_k": cap["evidence_k"], "run_id": run_id,
                                        "step_id": f"knowledge_{tool}_paperqa"}))
         order.append(tool)
+    for tool in order:
+        emit("start", f"{entries[tool]['title']}: PaperQA2 answering {len(QUESTIONS)} questions on Modal",
+             key=f"paperqa:{tool}")
     reads = dict(zip(order, dispatcher.run_wave(read_calls)))
+    for tool, outcome in reads.items():
+        if isinstance(outcome, BaseException):
+            emit("error", f"{entries[tool]['title']}: PaperQA2 failed: {str(outcome)[:200]}", key=f"paperqa:{tool}")
+        else:
+            emit("done", f"{entries[tool]['title']}: PaperQA2 read {len(outcome['data']['added'])} papers",
+                 key=f"paperqa:{tool}")
 
     reports = []
     for tool in order:
@@ -140,5 +159,7 @@ def ingest(tools: list[str], *, store: KnowledgeStore, dispatcher: Dispatcher, m
                                                                                   for p in papers),
                       missing=card["papers_missing"], guidance=len(card["guidance"]),
                       numbers=len(card["reported_numbers"]), lessons=lessons)
+        emit("info", f"{entry['title']}: knowledge card v{card['version']} saved with {len(card['guidance'])} "
+                     f"guidance, {len(card['reported_numbers'])} numbers; {lessons} lessons stored")
         reports.append(report)
     return reports

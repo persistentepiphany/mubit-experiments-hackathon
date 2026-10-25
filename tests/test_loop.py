@@ -49,6 +49,14 @@ def test_first_task_plans_runs_grades_and_saves_a_skill(tmp_path):
     assert research["corpus"]["manifest_sha256"] and research["papers"][0]["citations"] == 5540
     assert research["paperqa"]["corpora"][-1].startswith("seed/") and research["extraction"]["reported_numbers"]
     assert [c for c, _ in dispatcher.calls[:2]] == ["literature_corpus", "paperqa"]
+    from labloop.events import in_flight, read
+
+    events = read(run / "EVENTS.jsonl")
+    keys = [(e["kind"], e.get("key")) for e in events if e.get("key")]
+    for key in ("match", "corpus", "paperqa", "planner", "step:fold", "reviewer"):
+        assert ("start", key) in keys and ("done", key) in keys, key
+    assert in_flight(events) == [] and events[-1]["message"] == "Run finished: PASS"
+    assert any("fold finished in" in e["message"] and "mean_plddt 82.5" in e["message"] for e in events)
     skill = SkillStore(loop.state.skills).get("esmfold_monomer_confidence")
     assert standing(skill) == "draft"
     assert [c["role"] for c in models.calls] == ["researcher", "extractor", "planner", "reviewer"]

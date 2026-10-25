@@ -18,6 +18,7 @@ from typing import Any
 
 from labloop import catalog
 from labloop.dispatch import Dispatcher
+from labloop.events import Emit, n, silent
 from labloop.models import ModelError, Models, ask_json
 from labloop.state import RunDir
 
@@ -57,7 +58,7 @@ def structure(models: Models, run_id: str, subject: str, evidence: Any) -> dict[
 
 
 def research(task: dict[str, Any], *, run: RunDir, run_id: str, dispatcher: Dispatcher,
-             models: Models) -> dict[str, Any]:
+             models: Models, emit: Emit = silent) -> dict[str, Any]:
     cap = limits()
     queries = list(task.get("research_queries") or [])
     query_error = None
@@ -73,10 +74,14 @@ def research(task: dict[str, Any], *, run: RunDir, run_id: str, dispatcher: Disp
             query_error = str(error)
         queries = queries or [task["description"][:300]]
     queries = [q for q in queries if q.strip()][: cap["max_queries"]]
+    emit("info", f"Researcher wrote {n(len(queries), 'Europe PMC query', 'Europe PMC queries')}: " + " | ".join(q[:120] for q in queries),
+         phase="research", queries=queries)
 
     summary: dict[str, Any] = {"queries": queries, "query_error": query_error, "limits": cap, "papers": [],
                                "corpus": None, "paperqa": None, "extraction": None, "errors": []}
     corpora = list(SEED_CORPORA)
+    emit("start", f"Building the corpus on Modal: Europe PMC ({cap['page_size']} per query), OpenAlex citations, "
+                  f"full text, frozen manifest", phase="research", key="corpus")
     try:
         built = _single(dispatcher, "literature_corpus", {"queries": queries, "page_size": cap["page_size"],
                                                           "max_docs": cap["max_docs"], "run_id": run_id,
@@ -86,10 +91,17 @@ def research(task: dict[str, Any], *, run: RunDir, run_id: str, dispatcher: Disp
                              "errors": built["data"].get("errors", [])}
         summary["papers"] = built["data"]["documents"]
         corpora.insert(0, built["artifacts"]["corpus"])
+        sc = built["scores"]
+        emit("done", f"Corpus frozen: {n(sc['n_documents'], 'paper')} ({sc['n_full_text']} full text) chosen from "
+                     f"{sc['searched']} found", phase="research", key="corpus",
+             papers=[d.get("title") for d in summary["papers"]])
     except Exception as error:
         summary["errors"].append(f"corpus: {error}")
+        emit("error", f"Corpus failed: {str(error)[:300]}", phase="research", key="corpus")
 
     if corpora:
+        emit("start", f"PaperQA2 reading {len(corpora)} frozen corpora on Modal (this run's corpus and the "
+                      f"harness seed corpus), answering {len(QUESTIONS)} questions", phase="research", key="paperqa")
         try:
             read = _single(dispatcher, "paperqa", {
                 "corpora": corpora, "questions": [q.format(task=task["description"]) for q in QUESTIONS],
@@ -98,16 +110,25 @@ def research(task: dict[str, Any], *, run: RunDir, run_id: str, dispatcher: Disp
             summary["paperqa"] = {"answers": read["data"]["answers"], "documents": len(read["data"]["added"]),
                                   "failed": read["data"]["failed"], "cost_usd": read["scores"].get("cost_usd"),
                                   "answers_path": read["artifacts"].get("answers"), "corpora": corpora}
+            cited = {c["citation"] for a in read["data"]["answers"] for c in a["contexts"]}
+            emit("done", f"PaperQA2 read {n(len(read['data']['added']), 'paper')} and answered "
+                         f"{n(len(read['data']['answers']), 'question')} citing {n(len(cited), 'paper')}", phase="research",
+                 key="paperqa")
         except Exception as error:
             summary["errors"].append(f"paperqa: {error}")
+            emit("error", f"PaperQA2 failed: {str(error)[:300]}", phase="research", key="paperqa")
 
     if summary["paperqa"]:
         evidence = [{"question": a["question"], "answer": a["answer"],
                      "sources": sorted({c["citation"] for c in a["contexts"]})} for a in summary["paperqa"]["answers"]]
         try:
             summary["extraction"] = structure(models, run_id, f"Task: {task['description']}", evidence)
+            ex = summary["extraction"]
+            emit("info", f"Extracted {n(len(ex.get('reported_numbers') or []), 'sourced number')} and "
+                         f"{n(len(ex.get('guidance') or []), 'piece')} of guidance", phase="research")
         except ModelError as error:
             summary["errors"].append(f"extraction: {error}")
+            emit("error", f"Extraction failed: {str(error)[:300]}", phase="research")
 
     (run.path / "research").mkdir(exist_ok=True)
     run.write_json("research/extractions.json", summary)

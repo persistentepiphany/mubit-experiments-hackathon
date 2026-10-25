@@ -106,6 +106,8 @@ class AnthropicModels:
         if effort:
             kwargs["output_config"] = {"effort": effort}
             max_tokens = max(max_tokens, 16000)  # thinking at higher effort shares this budget with the answer
+        if provider == "zai":
+            max_tokens = max(max_tokens, 16000)  # GLM reasons before answering and shares this budget with the answer
         messages = self._client(provider).messages
         if provider != "zai" and model in FALLBACK_MODELS:
             messages = self._client(provider).beta.messages
@@ -116,6 +118,8 @@ class AnthropicModels:
         if response.stop_reason == "refusal":
             raise ModelError(f"{model} declined the {role} request: {getattr(response, 'stop_details', None)}")
         text = "".join(block.text for block in response.content if getattr(block, "type", "") == "text")
+        if not text.strip() and response.stop_reason == "max_tokens":
+            raise ModelError(f"{model} used all {max_tokens} tokens before answering the {role} request")
         usage = getattr(response, "usage", None)
         return Reply(text=text, provider=provider, model=getattr(response, "model", model),
                      input_tokens=getattr(usage, "input_tokens", 0) or 0,
