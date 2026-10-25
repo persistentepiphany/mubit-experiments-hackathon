@@ -56,6 +56,8 @@ def card(skill: dict[str, Any]) -> dict[str, Any]:
         "passes": sum(1 for e in evidence if e.get("verdict") == "PASS"),
         "version": skill["version"],
         "updated_at": skill.get("updated_at"),
+        "created_by_run": skill.get("created_by_run"),
+        "invocations": sum(1 for e in evidence if e.get("invocation")),
     }
 
 
@@ -109,7 +111,7 @@ class SkillStore:
 
     def create(self, *, meta: dict[str, Any], pipeline: dict[str, Any], input_schema: dict[str, Any],
                sources: list[Any], lessons: list[str], evidence: dict[str, Any],
-               plan_digest: str, run_id: str) -> dict[str, Any]:
+               plan_digest: str, run_id: str, provenance: dict[str, Any] | None = None) -> dict[str, Any]:
         base = slug(meta.get("name", ""))
         name, n = base, 2
         while self.get(name) is not None:
@@ -130,6 +132,7 @@ class SkillStore:
             "evidence": [evidence],
             "plan_digest": plan_digest,
             "created_by_run": run_id,
+            "provenance": provenance or {},
             "created_at": now,
             "updated_at": now,
             "retired": None,
@@ -147,6 +150,28 @@ class SkillStore:
         skill["version"] += 1
         skill["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         return self._write(skill)
+
+    def consult(self, name: str, record: dict[str, Any]) -> None:
+        """Log that a skill was considered for a run, and whether it was invoked or declined.
+
+        The log is append-only and outside the versioned skill file, because being considered is
+        not evidence and must not change a skill's version or standing.
+        """
+        path = self._dir(name) / "consultations.jsonl"
+        if not path.parent.exists():
+            return
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **record},
+                                    sort_keys=True, default=str) + "\n")
+
+    def consultations(self, name: str) -> list[dict[str, Any]]:
+        try:
+            path = self._dir(name) / "consultations.jsonl"
+        except SkillError:
+            return []
+        if not path.exists():
+            return []
+        return [json.loads(l) for l in path.read_text("utf-8").splitlines() if l.strip()]
 
     def retire(self, name: str, *, by: str, reason: str) -> dict[str, Any]:
         """Retire a skill. Only a person may call this, and must say who and why."""

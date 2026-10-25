@@ -101,9 +101,11 @@ class Loop:
             if missing:
                 raise ValueError(f"skill {force_skill} needs inputs {missing}")
             decision = {"decision": "reuse", "skill": force_skill, "version": skill["version"],
-                        "reason": "the caller asked for this skill by name",
+                        "reason": "the caller asked for this skill by name", "via": "requested by name",
                         "input_mapping": {k: {"from_input": k} for k in skill.get("input_schema", {})}}
             run.write_json("match.json", {"candidates": [force_skill], **decision}, once=True)
+            self.skills.consult(force_skill, {"run_id": run_id, "task": task["description"], "outcome": "invoked",
+                                              "via": "requested by name", "reason": decision["reason"]})
             return decision
 
         candidates = {s["name"]: s for s in self.skills.list(include_retired=False)}
@@ -135,7 +137,17 @@ class Loop:
             except ModelError as error:
                 decision = {"decision": "plan", "skill": None,
                             "reason": f"the applicability answer was rejected, so no skill is reused: {error}"}
+        if decision["decision"] == "reuse":
+            decision["via"] = "matched by the applicability role"
         run.write_json("match.json", {**record, **decision}, once=True)
+        for name in candidates:
+            invoked = decision.get("skill") == name
+            self.skills.consult(name, {
+                "run_id": run_id, "task": task["description"], "outcome": "invoked" if invoked else "declined",
+                "via": "applicability", "model": record.get("model"),
+                "matched_applies_when": decision.get("matched_applies_when") if invoked else None,
+                "input_mapping": decision.get("input_mapping") if invoked else None,
+                "reason": decision.get("reason")})
         return decision
 
     # ------------------------------------------------------------------- plan
@@ -239,8 +251,20 @@ class Loop:
         return results
 
     # ------------------------------------------------------------------ learn
+    def _mirror_status(self, before: int) -> str:
+        errors = list(getattr(self.memory, "errors", []))
+        if not hasattr(self.memory, "client"):
+            return "kept locally; no Mubit key is configured"
+        if len(errors) > before:
+            return f"refused by Mubit: {errors[-1][:160]}"
+        if not getattr(self.memory, "remote", False):
+            return "kept locally; Mubit memory is unreachable with this key"
+        if not getattr(self.memory, "project_id", None):
+            return "kept locally; MUBIT_PROJECT_ID is not set"
+        return "mirrored to Mubit"
+
     def learn(self, task, run_id, plan, results, graded, decision, lessons_used, inputs_digest,
-              plan_digest, emit: Emit = silent) -> dict[str, Any]:
+              plan_digest, emit: Emit = silent, findings: dict[str, Any] | None = None) -> dict[str, Any]:
         verdict = graded["verdict"]
         lesson_ids, lesson_texts, review_error, summary = [], [], None, None
         user = json.dumps({
@@ -285,20 +309,65 @@ class Loop:
                     "verdict": verdict, "metrics": graded["metrics"], "plan_digest": plan_digest}
         skill_action = None
         if decision["decision"] == "reuse":
+            evidence["invocation"] = {k: decision.get(k) for k in ("via", "matched_applies_when", "input_mapping",
+                                                                   "reason", "version")}
             skill = self.skills.append_evidence(decision["skill"], evidence, lesson_texts)
             skill_action = {"action": "evidence_appended", "skill": skill["name"], "version": skill["version"],
                             "standing": standing(skill)}
         elif verdict == "PASS":
+            findings = findings or {}
+            extraction = findings.get("extraction") or {}
+            paperqa = findings.get("paperqa") or {}
+            provenance = {
+                "run_id": run_id, "task": task["description"],
+                "queries": findings.get("queries", []),
+                "papers": [{k: p.get(k) for k in ("title", "doi", "year", "citations", "text_source")}
+                           for p in findings.get("papers", [])],
+                "papers_cited": sorted({c["citation"] for a in paperqa.get("answers", []) for c in a["contexts"]}),
+                "sourced_numbers": len(extraction.get("reported_numbers") or []),
+                "reference_checks": [c for c in plan["checks"] if "reference" in c],
+                "threshold_checks": [c for c in plan["checks"] if "reference" not in c],
+                "decisions": len(plan.get("decisions", [])),
+                "source_silent_decisions": sum(1 for d in plan.get("decisions", []) if d.get("source_silent")),
+                "tool_knowledge": sorted({s["tool"] for s in plan["steps"]}
+                                         & {c["tool"] for c in for_planner(KnowledgeStore(self.state.knowledge))}),
+                "lessons_recalled": [l.get("content") for l in lessons_used],
+            }
             skill = self.skills.create(meta=plan["skill"], pipeline=plan, input_schema=plan["input_schema"],
                                        sources=plan.get("sources", []), lessons=lesson_texts, evidence=evidence,
-                                       plan_digest=plan_digest, run_id=run_id)
+                                       plan_digest=plan_digest, run_id=run_id, provenance=provenance)
+            before = len(getattr(self.memory, "errors", []))
             self.memory.mirror_skill(skill)
-            skill_action = {"action": "created", "skill": skill["name"], "version": 1, "standing": standing(skill)}
+            mirror = self._mirror_status(before)
+            emit("info", f"Skill mirror: {mirror}", phase="learn")
+            skill_action = {"action": "created", "skill": skill["name"], "version": 1, "standing": standing(skill),
+                            "mubit": mirror}
         if skill_action:
             emit("info", f"Skill {skill_action['skill']} {'created' if skill_action['action'] == 'created' else 'given this run as evidence'}"
                          f", standing {skill_action['standing']}", phase="learn")
         return {"lessons": lesson_ids, "lesson_texts": lesson_texts, "review_error": review_error,
                 "summary": summary, "skill": skill_action}
+
+    # ----------------------------------------------------------------- report
+    def report(self, run: RunDir, emit: Emit = silent) -> dict[str, Any] | None:
+        """Write the run's short report and store it; a failure here never fails the run."""
+        try:
+            from labloop import reporting, storage
+            from labloop.bundle import run_bundle
+        except ImportError:
+            return None
+        emit("start", "Writing the run report with figures", phase="learn", key="report")
+        try:
+            files = reporting.build_report(run_bundle(run.path), self.artifacts_root)
+            stored = [store.put(run.path.name, files) for store in storage.from_env(self.state.root / "reports")]
+        except Exception as error:
+            emit("error", f"Report failed: {type(error).__name__}: {str(error)[:200]}", phase="learn", key="report")
+            return None
+        urls = {k: v for s in stored for k, v in [("supabase", s["urls"].get("report.html"))]
+                if s.get("location", "").startswith("supabase")}
+        emit("done", f"Report written with {sum(1 for f in files if f.startswith('figures/'))} figures"
+                     + (" and uploaded to Supabase" if urls else ""), phase="learn", key="report")
+        return {"files": sorted(files), **urls}
 
     # -------------------------------------------------------------------- all
     def run_task(self, task: dict[str, Any], run_id: str | None = None,
@@ -385,7 +454,7 @@ class Loop:
 
             phase("learn", f"Verdict {graded['verdict']}. Recording lessons.")
             learned = self.learn(task, run_id, frozen, results, graded, decision, lessons,
-                                 inputs_digest, digest, emit)
+                                 inputs_digest, digest, emit, findings if decision["decision"] != "reuse" else None)
             progress["learn"] = "done"
             findings_lines = [f"verdict {graded['verdict']}"] + [
                 f"{c['id']}: {c['status']} (observed {c.get('observed')})" for c in graded["checks"]]
@@ -395,6 +464,9 @@ class Loop:
                                 lessons=learned["lessons"], lesson_texts=learned["lesson_texts"],
                                 summary=learned["summary"], review_error=learned["review_error"],
                                 memory_errors=memory_errors[-5:])
+            report = self.report(run, emit)
+            if report:
+                record = run.status("done", report=report)
             emit("info", f"Run finished: {graded['verdict']}")
         except Exception as error:
             record = run.status("error", error=f"{type(error).__name__}: {error}",

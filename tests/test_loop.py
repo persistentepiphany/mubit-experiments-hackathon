@@ -85,6 +85,13 @@ def test_second_task_reuses_the_skill_without_planning(tmp_path):
     assert match["decision"] == "reuse" and match["matched_applies_when"] == CONDITION
     plan, _ = load_frozen(run)
     assert plan["origin"] == {"kind": "skill", "skill": "esmfold_monomer_confidence", "version": 1}
+    store = SkillStore(loop.state.skills)
+    skill = store.get("esmfold_monomer_confidence")
+    assert skill["provenance"]["run_id"] == first["run_id"] and skill["provenance"]["sourced_numbers"] == 1
+    assert skill["evidence"][1]["invocation"]["via"] == "matched by the applicability role"
+    assert skill["evidence"][1]["invocation"]["matched_applies_when"] == CONDITION
+    consulted = store.consultations("esmfold_monomer_confidence")
+    assert [c["outcome"] for c in consulted] == ["invoked"] and consulted[0]["run_id"] == second["run_id"]
 
 
 def test_same_inputs_twice_keep_the_skill_a_draft(tmp_path):

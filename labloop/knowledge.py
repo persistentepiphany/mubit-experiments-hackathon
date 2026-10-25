@@ -137,7 +137,8 @@ def ingest(tools: list[str], *, store: KnowledgeStore, dispatcher: Dispatcher, m
                 "summary": card.get("summary"), "guidance": card.get("guidance", []),
                 "reported_numbers": card.get("reported_numbers", []), "limitations": card.get("limitations", []),
                 "procedure": card.get("procedure", {}),
-                "papers": [{k: p.get(k) for k in ("title", "doi", "year", "citations", "text_source")} for p in papers],
+                "papers": [{k: p.get(k) for k in ("title", "doi", "year", "citations", "text_source", "file", "pmcid")}
+                           for p in papers],
                 "papers_missing": [d for d in entry["papers"] if d.lower() not in found],
                 "corpus": None if isinstance(corpus, BaseException) else corpus["artifacts"]["corpus"],
                 "manifest_sha256": None if isinstance(corpus, BaseException) else corpus["data"].get("manifest_sha256"),
