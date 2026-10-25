@@ -11,9 +11,9 @@ Live at **https://persistentepiphany--labloop-backend-api.us-east.modal.run** (A
 | Criterion | What answers it | Where to see it | Status |
 | --- | --- | --- | --- |
 | Recurring tasks, corrections becoming model updates | Six fixed-prompt roles, each recorded as one Mubit task. The corrector role and `POST /runs/{id}/corrections` turn a correction into a rule; "Re-run with this correction" plans again under it. | Run page, Learning page, Mubit Requests | Live: a correction to a failed ESMFold run became a planner rule and its re-run was started |
-| Own your intelligence layer | `labloop-routing` moves any role between a closed model (Opus 5 or Haiku 5.5 through Mubit) and an open one (GLM 5.3 through Z.AI). Each call is logged to the run's `CALLS.jsonl` with provider, model, latency, tokens, cost, `recorded_by_mubit` and `prompt_digest`. | Learning page, closed against open per role | Open side has data; closed side refills after the Anthropic limit resets |
+| Own your intelligence layer | `labloop-routing` moves any role between a closed model (Opus 5 or Haiku 5.5 through Mubit) and an open one (GLM 5.3 through Z.AI). Each call is logged to the run's `CALLS.jsonl` with provider, model, latency, tokens, cost, `recorded_by_mubit` and `prompt_digest`. | Learning page, closed against open per role | Both sides fill from new runs; roles route through Mubit by default again |
 | Fast refresh | Refresh jobs rebuild versioned tool cards from new papers. Skill versions and lessons grow with every run, and every recorded call is a new example for the next adapter version. | Skills page, Learning refresh panel, `GET /jobs` | Cards and skills verified; adapter retraining awaits new examples |
-| Use of Mubit | Every role call is recorded through the Mubit gateway. A correction yields a recorded corrector call and a recorded corrected planner call, which train the next adapter of each task. | [How Mubit is used](#how-mubit-is-used) | Gateway verified; memory API refused for this key |
+| Use of Mubit | Every role call is recorded through the Mubit gateway. A correction yields a recorded corrector call and a recorded corrected planner call, which train the next adapter of each task. | [How Mubit is used](#how-mubit-is-used) | Gateway verified; the SDK memory routes are not served by `api.mubit.ai` |
 
 <table><tr>
 <td width="50%"><img src="docs/screenshots/learning.png" alt="Learning page with the correction chain, failures fixed by the system, roles on Mubit, closed and open models, and refresh charts"><br><sub>Learning page from live state.</sub></td>
@@ -71,7 +71,7 @@ Mubit groups calls into a task by model and system prompt. labloop keeps each pr
 
 ### Memory and skills through the SDK
 
-`MubitMemory` (`labloop/memory.py`) uses `mubit.Client` from `mubit-sdk` 0.13.2. It calls `remember` per lesson with the run id as session, `get_context` before matching, `record_outcome` for each recalled lesson, and `create_skill` to mirror skills and tool cards when `MUBIT_PROJECT_ID` is set. This key is refused by that API, so runs read the local JSONL copy kept beside it (see [Limitations](#limitations)).
+`MubitMemory` (`labloop/memory.py`) uses `mubit.Client` from `mubit-sdk` 0.13.2. It calls `remember` per lesson with the run id as session, `get_context` before matching, `record_outcome` for each recalled lesson, and `create_skill` to mirror skills and tool cards when `MUBIT_PROJECT_ID` is set. Those routes (`/v2/control/...`) are not served by `api.mubit.ai`, which answers 404 `unknown_route` for any key because it hosts only the model gateway, so runs read the local JSONL copy kept beside it (see [Limitations](#limitations)).
 
 ## Architecture
 
@@ -194,12 +194,12 @@ Verified live on Modal and through the deployed API.
 | 1UBQ via `fetch_pdb` and ESMFold | pLDDT 90.5, pTM 0.83, PASS |
 | Harness research on a Chai-1 task | 63 papers found, 8 frozen in full text, PaperQA2 read 18 and cited 7, 30 sourced numbers |
 
-Built and awaiting data. The call ledger, the Learning page and the correction flow are in place. Runs older than the ledger have no `CALLS.jsonl`, and the closed-model column stays empty while every role routes to GLM 5.3. Adapter training needs new recorded examples, which resume once roles route through the gateway again.
+Built and awaiting data. The call ledger, the Learning page and the correction flow are in place. Runs older than the ledger have no `CALLS.jsonl`. Runs made while the Anthropic account was capped routed every role to GLM 5.3 and fill the open-model side; runs since the cap lifted route through Mubit and fill the closed side and the adapters' training examples.
 
 ## Limitations
 
-- The Anthropic account behind the Mubit provider key hit its usage limit until 2026-11-01, so `labloop-routing` sends every role and PaperQA2 to GLM 5.3 on Z.AI. Mubit does not record those calls, so current runs add no examples to the Mubit tasks.
-- The Mubit memory and skills API is unreachable with this key, even from Modal (HTTP `unknown_route`, gRPC authentication error). Lessons and skill mirrors therefore stay on the state volume, and recall uses word overlap instead of semantic search.
+- For a period the Anthropic account behind the Mubit provider key hit its usage limit, so `labloop-routing` sent every role to GLM 5.3 on Z.AI and Mubit recorded none of those calls. The limit has been lifted and the overrides removed, so roles route through Mubit again.
+- The `mubit-sdk` memory and skills routes are not part of the service at `api.mubit.ai`, which serves only the model gateway and answers 404 `unknown_route` for them; the SDK's gRPC host rejects this gateway key. Lessons and skill mirrors therefore stay on the state volume, and recall uses word overlap instead of semantic search. The gateway itself, which records calls and trains adapters, works with the key.
 - Supabase is not configured (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`), so reports live only on the state volume.
 - One orchestrator container runs at a time, so concurrent tasks queue.
 - The endpoint has no authentication, so anyone with the address can spend GPU time and model credit.

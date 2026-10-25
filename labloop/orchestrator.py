@@ -262,7 +262,7 @@ class Loop:
         if not hasattr(self.memory, "client"):
             return "kept locally; no Mubit key is configured"
         if len(errors) > before:
-            return f"refused by Mubit: {errors[-1][:160]}"
+            return f"kept locally; api.mubit.ai does not serve the SDK memory routes ({errors[-1][:120]})"
         if not getattr(self.memory, "remote", False):
             return "kept locally; Mubit memory is unreachable with this key"
         if not getattr(self.memory, "project_id", None):

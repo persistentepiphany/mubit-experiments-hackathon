@@ -692,7 +692,7 @@ function renderProvenance(s){
       ${papers.slice(0,5).map(x=>`<div class="small muted" style="line-height:1.45" ${paperAttrs(x, null)}>• <span style="text-decoration:underline">${esc(x.title)}</span> (${esc(x.year||'')}${x.citations!=null?`, ${x.citations} citations`:''})</div>`).join('')}`
       : `<div class="small muted" style="line-height:1.55">This skill predates provenance tracking, so only its source run and plan digest are recorded.</div>`}
     ${(s.sources||[]).length ? `<div class="eyebrow" style="margin-top:6px">Sources cited by the plan</div>${s.sources.slice(0,5).map(x=>`<div class="small muted" style="line-height:1.45">• ${esc(x.title||x.id)}${x.used_for?` · ${esc(x.used_for)}`:''}</div>`).join('')}` : ''}
-    <div class="small muted" style="line-height:1.5;margin-top:4px">Mubit mirror: the skill's description is sent to Mubit when its memory API is reachable with this key; otherwise it is kept on the state volume, which the planner and matcher read.</div></div>`;
+    <div class="small muted" style="line-height:1.5;margin-top:4px">Mubit: the model calls that planned and graded this skill went through the Mubit gateway when routed there, which records them as training examples. The SDK's skill mirror is kept on the state volume, because api.mubit.ai serves only the gateway.</div></div>`;
 }
 async function renderSkill(name){
   setNav('skills'); $('#view').innerHTML = skeleton();

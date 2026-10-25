@@ -93,7 +93,7 @@ def ingest_knowledge(tools: list[str] | None = None, job_id: str | None = None) 
             job.append("CALLS.jsonl", call)
         errors = list(getattr(mem, "errors", []))
         if errors:
-            emit("info", f"Mubit memory and skill writes were refused ({len(errors)} times); cards and lessons are "
+            emit("info", f"Mubit memory and skill routes are not served by api.mubit.ai ({len(errors)} attempts); cards and lessons are "
                          f"kept on the state Volume. Last error: {errors[-1][:160]}")
         job.write_json("job.json", {"kind": "knowledge", "phase": "done", "tools": tools, "started_at": started,
                                     "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
