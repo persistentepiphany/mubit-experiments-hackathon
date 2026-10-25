@@ -105,6 +105,9 @@ details summary{cursor:pointer;font-size:12.5px;color:#4a443c}details p{font-siz
 .drawer iframe{width:100%;height:100%;border:0;background:#fff}
 .drawer .txt{padding:18px 22px;font-size:13.5px;line-height:1.65;color:#2a2622;white-space:pre-wrap}
 .drawer .txt h4{font-family:'Instrument Serif',serif;font-weight:400;font-size:18px;margin:18px 0 6px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line2);margin-bottom:2px;overflow-x:auto}
+.tabs button{all:unset;cursor:pointer;font-size:13px;padding:8px 12px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--ink)}
 .paperlink{cursor:pointer}.paperlink:hover .ot{text-decoration:underline}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:var(--soft);padding:12px;border-radius:10px;margin:0}
 @media (max-width:820px){
@@ -160,7 +163,7 @@ const PHASES = [
   {key:'grade', name:'Grade the checks', agent:'grader'},
   {key:'learn', name:'Record lessons', agent:'reviewer'},
 ];
-const S = {selected:null, skills:[], runs:[], dismissed:{}, timer:null, viewers:{}, molStyle:{}};
+const S = {selected:null, skills:[], runs:[], dismissed:{}, timer:null, viewers:{}, molStyle:{}, tab:{}};
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(path, opts){
@@ -211,8 +214,7 @@ function renderHome(){
       <p class="sub">Describe a task. Agents match it to a saved skill or read the literature, compose a pipeline of Modal tools, run it and grade it.</p></div>
     <div class="card composer">
       <textarea id="prompt" rows="3" placeholder="e.g. Fetch UniProt P69905 and predict its structure with ESMFold, reporting whether the fold is confident."></textarea>
-      <div class="bar"><span class="lbl">Agents</span>
-        ${['planner','researcher','extractor','reviewer'].map(a=>`<span class="chip">${a}</span>`).join('')}
+      <div class="bar">
         <input id="project" list="projectList" placeholder="Project (optional)" value="${esc(S.project||'')}" style="margin-left:auto;border:1px solid rgba(42,38,34,.1);border-radius:999px;padding:7px 12px;font-size:12.5px;background:var(--soft);width:170px">
         <datalist id="projectList">${[...new Set(S.runs.map(r=>r.project||'General'))].map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
         <button class="primary" id="runPrompt">Run pipeline</button></div>
@@ -358,6 +360,12 @@ function renderStudies(d){
     ${guide.slice(0,4).map(g=>`<div class="small" style="line-height:1.5">• ${esc(g.statement)} <span class="muted">(${esc(String(g.source||'').slice(0,60))})</span></div>`).join('')}
     ${pq.map(a=>`<details><summary>${esc(a.question.slice(0,110))}…</summary><p>${esc(a.answer)}</p></details>`).join('')}</div>`;
 }
+function renderPapers(d){
+  const papers = (d.research && d.research.papers) || []; if (!papers.length) return '';
+  const corpus = d.research.corpus && d.research.corpus.path;
+  return `<div class="card" style="display:flex;flex-direction:column;gap:12px"><div class="cardhead"><span class="eyebrow">Papers read</span><span class="small muted">${papers.length} frozen · click to open</span></div>
+    ${papers.map(p => `<div class="out" ${paperAttrs(p, corpus)}><div class="ot">${esc(p.title)}</div><div class="om">${esc([p.year, p.citations!=null?p.citations+' citations':null, p.text_source && p.text_source!=='abstract' ? 'full text' : 'abstract only'].filter(Boolean).join(' · '))}</div></div>`).join('')}</div>`;
+}
 function renderStructures(d){
   const ex = (d.experiments||[]).filter(e => e.status==='ok' && e.result && e.result.artifacts && e.result.artifacts.structure);
   if (!ex.length) return '';
@@ -440,8 +448,9 @@ function renderOutputs(d){
     const sc = (e.result && e.result.scores) || {}; const art = (e.result && e.result.artifacts) || {};
     const scoreText = Object.entries(sc).map(([k,v])=>`${k} ${fmtNum(v)}`).join(' · ');
     return `<div class="out"><div class="ot">${esc(e.step_id)} · ${esc(e.tool)}</div><div class="om">${esc(scoreText||'no scores')}</div>${art.structure?`<div class="om">${esc(art.structure)}</div>`:''}</div>`;
-  }).concat(papers.map(p => `<div class="out" ${paperAttrs(p, d.research && d.research.corpus && d.research.corpus.path)}><div class="ot">${esc(p.title)}</div><div class="om">${esc([p.year, p.citations!=null?p.citations+' citations':null, p.text_source, p.doi ? 'doi '+p.doi : p.id].filter(Boolean).join(' · '))} · read</div></div>`));
-  return `<div class="card" style="display:flex;flex-direction:column;gap:14px"><div class="cardhead"><span class="eyebrow">Outputs</span><span class="small muted">${papers.length} ${papers.length===1?'paper':'papers'}</span></div>
+  });
+  if (!items.length) return '';
+  return `<div class="card" style="display:flex;flex-direction:column;gap:14px"><div class="cardhead"><span class="eyebrow">Step outputs</span><span class="small muted">${items.length}</span></div>
     ${items.length ? items.join('') : '<div class="small muted" style="line-height:1.5">Results appear here as agents finish each step.</div>'}</div>`;
 }
 function renderSummary(d){
@@ -461,6 +470,20 @@ function renderLearned(d){
     <div class="box"><span class="dot" style="background:var(--slate)"></span>${esc(sk.skill)}<span style="margin-left:auto">${standingPill(sk.standing)}</span></div>
     <div style="display:flex;justify-content:flex-end"><button class="primary" data-open="${esc(sk.skill)}">Open skill</button></div></div>`;
 }
+function renderTabs(d, phase){
+  const running = phase !== 'done' && phase !== 'error';
+  const tabs = [
+    ['overview', 'Overview', renderInvocation(d) + renderSummary(d) + renderMetrics(d) + renderLearned(d)],
+    ['structure', 'Structure', renderStructures(d) + renderOutputs(d)],
+    ['studies', 'Studies', renderStudies(d) + renderPapers(d)],
+    ['activity', running ? 'Activity · live' : 'Activity', renderActivity(d, phase)],
+  ].filter(t => t[2].trim());
+  if (!tabs.length) return '';
+  const want = S.tab[d.run_id] || (running ? 'activity' : 'overview');
+  const cur = tabs.find(t => t[0] === want) ? want : tabs[0][0];
+  return `<div class="tabs">${tabs.map(t => `<button data-tab="${t[0]}" class="${t[0]===cur?'on':''}">${esc(t[1])}</button>`).join('')}</div>
+    ${tabs.find(t => t[0] === cur)[2]}`;
+}
 async function renderRun(id){
   setNav('runs');
   let d;
@@ -478,10 +501,11 @@ async function renderRun(id){
     </div>
     ${phase === 'error' ? `<div class="err"><strong>The run stopped.</strong> ${esc(st.error)}</div>` : ''}
     <div class="cols"><div>${renderSteps(d)}</div>
-      <div class="side">${renderInvocation(d)}${renderActivity(d, phase)}${renderStructures(d)}${renderMetrics(d)}${renderSummary(d)}${renderLearned(d)}${renderStudies(d)}${renderOutputs(d)}</div></div>
+      <div class="side">${renderTabs(d, phase)}</div></div>
   </div>`;
   document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => go(`#/skills/${b.dataset.open}`));
   document.querySelectorAll('[data-dismiss]').forEach(b => b.onclick = () => { S.dismissed[id] = true; renderRun(id); });
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { S.tab[id] = b.dataset.tab; renderRun(id); });
   mountStructures();
   clearTimeout(S.timer);
   if (phase !== 'done' && phase !== 'error') S.timer = setTimeout(() => renderRun(id), 2500);
@@ -524,9 +548,9 @@ async function renderSkills(){
     const k = await api('/knowledge');
     $('#knowledge').innerHTML = k.tools.length ? k.tools.map(t => `<div class="skillcard">
       <div style="display:flex;align-items:center;gap:8px"><span class="dot" style="background:${t.deployed?'var(--olive)':'var(--muted)'}"></span><span style="font-size:14.5px;font-weight:500">${esc(t.title)}</span><span class="small muted" style="margin-left:auto">${t.deployed?'deployed':'not deployed'} · v${t.version}</span></div>
-      <div class="kv">${esc(t.summary||'')}</div>
-      ${t.guidance.slice(0,3).map(g=>`<div class="small" style="line-height:1.5">• ${esc(g.statement)} <span class="muted">(${esc(String(g.source||'').slice(0,60))})</span></div>`).join('')}
-      ${t.papers.map(x=>`<div class="small" style="line-height:1.45" ${paperAttrs(x, t.corpus)}>• <span style="text-decoration:underline">${esc(x.title)}</span> <span class="muted">${esc(x.year||'')}</span></div>`).join('')}
+      <div class="kv" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(t.summary||'')}</div>
+      ${t.guidance.slice(0,1).map(g=>`<div class="small" style="line-height:1.5">• ${esc(g.statement)}</div>`).join('')}
+      ${t.papers.slice(0,2).map(x=>`<div class="small muted" style="line-height:1.45" ${paperAttrs(x, t.corpus)}><span style="text-decoration:underline">${esc(x.title)}</span> ${esc(x.year||'')}</div>`).join('')}
       <div class="small muted" style="margin-top:auto">${t.papers.length} papers · ${t.guidance.length} guidance · ${t.reported_numbers.length} numbers${t.papers_missing.length?` · ${t.papers_missing.length} not found`:''}</div>
     </div>`).join('') : '<div class="muted small">No tool knowledge yet.</div>';
   } catch(e) { $('#knowledge').innerHTML = `<div class="small" style="color:var(--fail)">${esc(e.message)}</div>`; }
@@ -610,6 +634,7 @@ async function renderJob(){
   let j; try { j = (await api('/jobs')).jobs[0]; } catch(e) { return; }
   if (!j) { $('#job').innerHTML = ''; return; }
   const running = j.phase === 'running' || j.phase === undefined;
+  if (!running) { $('#job').innerHTML = ''; if ($('#refreshKnowledge')) $('#refreshKnowledge').disabled = false; return; }
   let detail = {events: []}; try { detail = await api(`/jobs/${j.job_id}`); } catch(e) {}
   if (!$('#job')) return;
   $('#job').innerHTML = `<div class="card" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">

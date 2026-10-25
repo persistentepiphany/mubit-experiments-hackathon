@@ -112,6 +112,44 @@ def ingest(tools: str = "") -> None:
     print(json.dumps(ingest_knowledge.remote([t for t in tools.split(",") if t] or None), indent=1))
 
 
+@app.function(image=image, volumes={STATE: state_volume, ARTIFACTS: artifacts_volume}, timeout=60 * 60)
+def backfill_reports(run_ids: list[str] | None = None, force: bool = False) -> list[dict]:
+    """Write reports for finished runs that predate the report generator, from their real artifacts."""
+    from labloop import reporting, storage
+    from labloop.bundle import run_bundle
+    from labloop.state import RunDir, StateRoot
+
+    state_volume.reload()
+    artifacts_volume.reload()
+    state = StateRoot(STATE)
+    out = []
+    for path in sorted(state.runs.glob("r-*")):
+        if run_ids and path.name not in run_ids:
+            continue
+        run = RunDir(path)
+        status = run.read_json("run.json", {}) or {}
+        if status.get("phase") not in ("done", "error") or (status.get("report") and not force):
+            continue
+        try:
+            files = reporting.build_report(run_bundle(path), ARTIFACTS)
+            stored = [store.put(path.name, files) for store in storage.from_env(state.root / "reports")]
+            urls = {"supabase": s["urls"].get("report.html") for s in stored
+                    if s.get("location", "").startswith("supabase")}
+            status["report"] = {"files": sorted(files), **{k: v for k, v in urls.items() if v}, "backfilled": True}
+            run.write_json("run.json", status)
+            out.append({"run_id": path.name, "figures": sum(1 for f in files if f.startswith("figures/"))})
+        except Exception as error:
+            out.append({"run_id": path.name, "error": f"{type(error).__name__}: {str(error)[:200]}"})
+        state_volume.commit()
+    return out
+
+
+@app.local_entrypoint()
+def backfill(force: bool = False) -> None:
+    for row in backfill_reports.remote(None, force):
+        print(row)
+
+
 @app.function(image=image, volumes={STATE: state_volume}, max_containers=1)
 def retire_skill(name: str, by: str, reason: str) -> dict:
     """The human path to retiring a skill. No model call reaches this function."""
