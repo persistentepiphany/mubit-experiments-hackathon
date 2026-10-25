@@ -87,6 +87,9 @@ def validate(plan: dict[str, Any], input_names: set[str]) -> list[str]:
         if entry is None:
             errors.append(f"step {sid!r} names unknown tool {tool!r}")
             continue
+        if entry["kind"] == "research":
+            errors.append(f"step {sid!r} names {tool!r}, which only the research step uses")
+            continue
         if not entry["available"]:
             errors.append(f"step {sid!r} names tool {tool!r}, which is not deployed")
             continue

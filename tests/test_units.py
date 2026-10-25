@@ -119,3 +119,20 @@ def test_role_spec_carries_an_optional_effort(monkeypatch):
     monkeypatch.setenv("LABLOOP_MODEL_PLANNER", "mubit:claude-opus-5@extreme")
     with pytest.raises(ModelError):
         role_target("planner")
+
+
+def test_tool_knowledge_ingest_saves_cards_and_lessons(tmp_path):
+    from labloop.knowledge import KnowledgeStore, for_planner, ingest
+    from labloop.memory import LocalMemory
+    from labloop.models import ScriptedModels
+    from labloop.testing import EXTRACTION, FakeDispatcher
+
+    store, memory = KnowledgeStore(tmp_path / "knowledge"), LocalMemory(tmp_path / "memory")
+    reports = ingest(["esmfold", "fetch_uniprot"], store=store, dispatcher=FakeDispatcher(),
+                     models=ScriptedModels({"extractor": lambda u: EXTRACTION}), memory=memory, run_id="k-1")
+    assert [r["tool"] for r in reports] == ["esmfold"] and reports[0]["lessons"] == 2
+    card = store.get("esmfold")
+    assert card["version"] == 1 and card["papers_missing"] == ["10.1101/2022.07.20.500902"]
+    assert for_planner(store)[0]["guidance"][0]["source"].startswith("ESMFold")
+    assert "pLDDT" in memory.context("esmfold plddt confident", run_id="x")[0]["content"]
+    assert (tmp_path / "memory" / "skill_mirror.jsonl").read_text().count("tool_esmfold") == 1

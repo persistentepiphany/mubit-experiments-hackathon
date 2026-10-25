@@ -18,6 +18,7 @@ from labloop import catalog, pipeline
 from labloop.canonical import digest_document
 from labloop.dispatch import Dispatcher
 from labloop.grading import DomainGrader, grade
+from labloop.knowledge import KnowledgeStore, for_planner
 from labloop.memory import Memory
 from labloop.models import ModelError, Models, ask_json
 from labloop.research import research
@@ -162,7 +163,15 @@ class Loop:
             "task": task["description"],
             "inputs": {k: {"type": _schema_type(v), "preview": _preview(v)} for k, v in inputs.items()},
             "catalog": catalog.for_prompt(),
-            "literature": {"papers": findings.get("papers", []), "extractions": findings.get("extractions", [])},
+            "tool_knowledge": for_planner(KnowledgeStore(self.state.knowledge)),
+            "literature": {
+                "papers": [{k: p.get(k) for k in ("title", "doi", "year", "citations", "text_source")}
+                           for p in findings.get("papers", [])],
+                "paperqa_answers": [{"question": a["question"], "answer": a["answer"],
+                                     "sources": sorted({c["citation"] for c in a["contexts"]})}
+                                    for a in ((findings.get("paperqa") or {}).get("answers") or [])],
+                "extraction": findings.get("extraction"),
+            },
             "advisory_lessons": [l["content"] for l in lessons],
         }, indent=1)
         plan, _ = ask_json(self.models, "planner", user, run_id=run_id, max_tokens=8192,
@@ -297,7 +306,7 @@ class Loop:
             else:
                 phase("research", "Searching the literature for a procedure.")
                 findings = research(task, run=run, run_id=run_id, dispatcher=self.dispatcher, models=self.models)
-                if not findings["extractions"]:
+                if not findings.get("extraction"):
                     run.assume("No literature procedure was extracted, so every planning choice is source-silent.")
                 phase("plan", "Composing a pipeline from the catalog.")
                 drafted = self.plan(task, run_id, findings, lessons)

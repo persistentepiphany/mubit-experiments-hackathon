@@ -36,6 +36,8 @@ class Memory(Protocol):
 
     def mirror_skill(self, skill: dict[str, Any]) -> None: ...
 
+    def mirror_tool(self, card: dict[str, Any], entry: dict[str, Any]) -> None: ...
+
 
 def _words(text: str) -> set[str]:
     return {w for w in _WORD.findall(text.lower()) if len(w) > 2}
@@ -82,6 +84,11 @@ class LocalMemory:
     def mirror_skill(self, skill) -> None:
         self._append(self.skills, {"name": skill["name"], "version": skill["version"],
                                    "description": skill["description"], "at": time.time()})
+
+    def mirror_tool(self, card, entry) -> None:
+        self._append(self.skills, {"name": f"tool_{card['tool']}", "version": card["version"],
+                                   "description": card.get("summary") or entry["purpose"], "kind": "tool",
+                                   "at": time.time()})
 
 
 def _entries(response: Any) -> list[dict[str, Any]]:
@@ -175,6 +182,26 @@ class MubitMemory:
                 "instructions": json.dumps({"applies_when": skill["applies_when"],
                                             "not_for": skill["not_for"],
                                             "version": skill["version"]}),
+            })
+        except Exception as error:
+            self._note("create_skill", error)
+
+    def mirror_tool(self, card, entry) -> None:
+        """Mirror a tool's knowledge card as a Mubit tool skill whose instructions carry the sourced guidance."""
+        self.local.mirror_tool(card, entry)
+        if not self.project_id or not self.remote:
+            return
+        schema = {"type": "object", "properties": {k: {"type": v.get("type", "string"),
+                                                       "description": v.get("description", "")}
+                                                   for k, v in entry.get("inputs", {}).items()},
+                  "required": [k for k, v in entry.get("inputs", {}).items() if v.get("required")]}
+        try:
+            self.client.create_skill({
+                "project_id": self.project_id, "agent_id": "", "name": f"tool_{card['tool']}",
+                "description": card.get("summary") or entry["purpose"], "skill_type": "tool",
+                "parameters_schema": json.dumps(schema),
+                "instructions": json.dumps({k: card.get(k) for k in ("guidance", "reported_numbers", "limitations",
+                                                                      "papers", "version")}),
             })
         except Exception as error:
             self._note("create_skill", error)
