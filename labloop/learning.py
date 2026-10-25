@@ -123,7 +123,7 @@ def roles(calls: list[dict[str, Any]], runs: list[dict[str, Any]], routing: dict
                 "median_output_tokens": _median([c["output_tokens"] for c in cs]),
                 "cost_per_call_usd": (round(sum(c["cost_usd"] for c in cs) / len(cs), 5)
                                       if all(c.get("cost_usd") is not None for c in cs) else None),
-                "recorded_by_mubit": p == "mubit",
+                "recorded_by_mubit": p.startswith("mubit"),
                 "runs_passed": sum(1 for c in cs if verdict.get(c["run_id"]) == "PASS"),
                 "runs": len({c["run_id"] for c in cs}),
             } for (p, m), cs in sorted(models.items())],

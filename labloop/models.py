@@ -1,4 +1,4 @@
-"""Model calls by role, all in the Anthropic Messages format.
+"""Model calls by role, in the Anthropic Messages or OpenAI Chat Completions format.
 
 Each role has a fixed system prompt (see `prompts.py`) and a default provider
 and model, written `provider:model` or `provider:model@effort` and overridable
@@ -23,6 +23,9 @@ from labloop import prompts
 PROVIDERS: dict[str, dict[str, Any]] = {
     "mubit": {"base_url": "https://api.mubit.ai/anthropic", "key_env": ("MUBIT_API_KEY", "MUBIT_API_TOKEN")},
     "zai": {"base_url": "https://api.z.ai/api/anthropic", "key_env": ("ZAI_API_KEY",)},
+    # OpenAI models through the Mubit gateway, recorded and trained on like the Anthropic route.
+    "mubit-openai": {"base_url": "https://api.mubit.ai/openai/v1", "key_env": ("MUBIT_API_KEY", "MUBIT_API_TOKEN"),
+                     "format": "openai"},
 }
 
 ROLE_DEFAULTS = {
@@ -76,7 +79,7 @@ class Ledger:
         cost = (input_tokens * rates[0] + output_tokens * rates[1]) / 1e6 if rates else None
         call = {"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "role": role,
                 "run_id": run_id, "provider": provider, "model": model,
-                "recorded_by_mubit": provider == "mubit", "prompt_digest": prompt_digest(role),
+                "recorded_by_mubit": provider.startswith("mubit"), "prompt_digest": prompt_digest(role),
                 "latency_s": round(time.time() - started, 2), "input_tokens": input_tokens,
                 "output_tokens": output_tokens, "cost_usd": round(cost, 6) if cost is not None else None,
                 "ok": ok, "stop_reason": stop_reason, "error": error}
@@ -140,15 +143,22 @@ class AnthropicModels:
 
     def _client(self, provider: str):
         if provider not in self._clients:
-            import anthropic
-
             key = _key(provider)
             if not key:
                 raise ModelError(f"no key for provider {provider}; set one of {PROVIDERS[provider]['key_env']}")
             headers = {}
-            if provider == "mubit":
+            if provider.startswith("mubit"):
                 headers["x-middleware-record"] = os.environ.get("LABLOOP_MUBIT_RECORD", "full")
                 headers["x-middleware-store"] = os.environ.get("LABLOOP_MUBIT_STORE", "true")
+            if PROVIDERS[provider].get("format") == "openai":
+                import openai
+
+                self._clients[provider] = openai.OpenAI(
+                    base_url=PROVIDERS[provider]["base_url"], api_key=key, default_headers=headers,
+                    timeout=float(os.environ.get("LABLOOP_MODEL_TIMEOUT_S", "300")), max_retries=2)
+                return self._clients[provider]
+            import anthropic
+
             self._clients[provider] = anthropic.Anthropic(
                 base_url=PROVIDERS[provider]["base_url"], api_key=key, default_headers=headers,
                 timeout=float(os.environ.get("LABLOOP_MODEL_TIMEOUT_S", "300")), max_retries=2)
@@ -176,7 +186,30 @@ class AnthropicModels:
                            output_tokens=reply.output_tokens, stop_reason=reply.stop_reason)
         return reply
 
+    def _complete_openai(self, role, user, run_id, provider, model, effort, max_tokens) -> Reply:
+        # OpenAI takes `metadata` only on stored completions, so the gateway keys each call's session on its
+        # instructions and first message, which differ from call to call.
+        kwargs: dict[str, Any] = {}
+        if effort:
+            kwargs["reasoning_effort"] = effort
+            max_tokens = max(max_tokens, 16000)  # reasoning shares this budget with the answer
+        response = self._client(provider).chat.completions.create(
+            model=model, max_completion_tokens=max_tokens, **kwargs,
+            messages=[{"role": "system", "content": prompts.SYSTEM[role]}, {"role": "user", "content": user}])
+        choice = response.choices[0]
+        if getattr(choice.message, "refusal", None):
+            raise ModelError(f"{model} declined the {role} request: {choice.message.refusal}")
+        text = choice.message.content or ""
+        if not text.strip() and choice.finish_reason == "length":
+            raise ModelError(f"{model} used all {max_tokens} tokens before answering the {role} request")
+        usage = getattr(response, "usage", None)
+        return Reply(text=text, provider=provider, model=getattr(response, "model", model) or model,
+                     input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                     output_tokens=getattr(usage, "completion_tokens", 0) or 0, stop_reason=choice.finish_reason)
+
     def _complete(self, role, user, run_id, provider, model, effort, max_tokens) -> Reply:
+        if PROVIDERS[provider].get("format") == "openai":
+            return self._complete_openai(role, user, run_id, provider, model, effort, max_tokens)
         kwargs: dict[str, Any] = {}
         if provider == "mubit":
             kwargs["metadata"] = {"user_id": run_id}  # the gateway's session key on Anthropic calls

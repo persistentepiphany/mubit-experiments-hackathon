@@ -31,7 +31,7 @@ routing = modal.Secret.from_name("labloop-routing")
 
 image = (
     modal.Image.debian_slim(python_version="3.12")
-    .uv_pip_install("anthropic==2.3.0", "mubit-sdk==0.13.2", "fastapi[standard]==0.162.0", "pydantic>=2.9",
+    .uv_pip_install("anthropic==2.3.0", "openai==3.37.0", "mubit-sdk==0.13.2", "fastapi[standard]==0.162.0", "pydantic>=2.9",
                     "jsonschema>=4.20", "PyYAML>=6.0", "matplotlib==3.10.3", "gemmi==0.7.3", "numpy>=1.26")
 )
 _ppi = os.environ.get("PPI_HARNESS_PATH")

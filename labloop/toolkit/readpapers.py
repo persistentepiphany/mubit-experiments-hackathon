@@ -2,8 +2,9 @@
 
 PaperQA2 routes every model call through LiteLLM. Here LiteLLM speaks the
 Anthropic Messages format through the Mubit gateway (`mubit:<model>`), so the
-summary and answer calls are recorded by the gateway like every other call, or
-directly to Z.AI (`zai:<model>`) when the routing secret says so.
+summary and answer calls are recorded by the gateway like every other call. The
+OpenAI format through the gateway (`mubit-openai:<model>[@effort]`) and Z.AI
+(`zai:<model>`) are used when the routing secret names them.
 Embeddings are a local
 sentence-transformers model, because the gateway serves embeddings only in the
 OpenAI format. The configuration sends no `temperature`, which the Anthropic
@@ -19,17 +20,21 @@ from pathlib import Path
 from typing import Any
 
 PROVIDERS = {"mubit": ("https://api.mubit.ai/anthropic", ("MUBIT_API_KEY", "MUBIT_API_TOKEN")),
-             "zai": ("https://api.z.ai/api/anthropic", ("ZAI_API_KEY",))}
+             "zai": ("https://api.z.ai/api/anthropic", ("ZAI_API_KEY",)),
+             "mubit-openai": ("https://api.mubit.ai/openai/v1", ("MUBIT_API_KEY", "MUBIT_API_TOKEN"))}
 EMBEDDING = "st-multi-qa-MiniLM-L6-cos-v1"
 
 
 def _llm_config(spec: str) -> tuple[str, dict[str, Any]]:
     provider, _, model = spec.partition(":") if ":" in spec else ("mubit", "", spec)
+    model, _, effort = model.partition("@")
     base, key_names = PROVIDERS[provider]
     key = next((os.environ[k] for k in key_names if os.environ.get(k)), None)
-    name = f"anthropic/{model}"
+    name = f"{'openai' if provider == 'mubit-openai' else 'anthropic'}/{model}"
     params: dict[str, Any] = {"model": name, "api_base": base, "api_key": key}
-    if provider == "mubit":
+    if effort:
+        params["reasoning_effort"] = effort
+    if provider.startswith("mubit"):
         params["extra_headers"] = {"x-middleware-record": os.environ.get("LABLOOP_MUBIT_RECORD", "full")}
     return name, {"name": name, "model_list": [{"model_name": name, "litellm_params": params}]}
 
