@@ -1,14 +1,16 @@
-"""Assemble the filmed scenes into the final video.
+"""Assemble the filmed scenes into the final, captioned video.
 
-1. Check the narration. video-demo writes where each line lands in a clip
-   (<scene>.lines.json). No line may start before the previous one ends, and
-   no line may fall inside a transition, where two clips' audio is mixed.
-2. Frame the website scenes in the style of Recordly
-   (github.com/webadderallorg/recordly): the capture sits on one of Recordly's
-   wallpapers, blurred, with padding, rounded corners and a shadow. Explainer
-   scenes are already full frame.
-3. Tighten long silent stretches, join the clips with crossfades, and level
-   the audio.
+1. Check the lines. video-demo writes where each line lands in a clip
+   (<scene>.lines.json); no line may start before the previous one ends.
+2. Tighten each clip: a silent stretch between lines (scrolling, clicking,
+   waiting for the page) longer than MAX_GAP is played faster, at most
+   MAX_SPEED times, while every line keeps its own pace.
+3. Frame each clip in the style of Recordly (github.com/webadderallorg/recordly):
+   the capture sits on one of Recordly's wallpapers, blurred, with rounded
+   corners and a shadow, raised to leave a band below it for captions.
+4. Join the clips with crossfades and burn in each line as a caption. The
+   film has no voice-over, so the synthesised audio, which only timed the
+   lines, is dropped.
 
     python3 demo/compose.py <demo-out/light> <wallpaper.jpg> <out.mp4>
 """
@@ -22,13 +24,15 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
 
 W, H = 1920, 1080
-TOUR = ["viz-intro", "viz-mubit", "task", "run1", "lesson", "viz-memory", "run2", "report", "reuse", "viz-outro"]
+TOP = 34            # the window's distance from the top edge; captions sit below it
+TOUR = ["viz-mubit", "task", "run1", "lesson", "viz-memory", "run2", "reuse", "viz-outro"]
 FADE = 0.7          # seconds of crossfade between clips
-GAP = 0.08          # the least silence allowed between two lines
-LEAD = 0.35         # silence kept between a transition and the nearest line
-MAX_GAP = 1.4       # a silent stretch longer than this is played faster...
+GAP = 0.08          # the least time between two lines
+LEAD = 0.35         # time kept between a transition and the nearest line
+MAX_GAP = 1.2       # a silent stretch longer than this is played faster...
 MAX_SPEED = 3.0     # ...but never more than this much faster
-RADIUS, SHADOW_BLUR, SHADOW_OFFSET, SHADOW_ALPHA = 22, 34, 18, 120
+LINGER = 0.9        # a caption stays up this long after its line, unless the next one starts
+RADIUS, SHADOW_BLUR, SHADOW_OFFSET, SHADOW_ALPHA = 22, 30, 14, 110
 
 
 def probe(path: Path) -> tuple[int, int, float]:
@@ -39,11 +43,15 @@ def probe(path: Path) -> tuple[int, int, float]:
     return int(out[0]), int(out[1]), float(out[2])
 
 
-def check_narration(clips: list[Path]) -> list[str]:
+def lines_of(clip: Path) -> list[dict]:
+    return sorted(json.loads(clip.with_suffix(".lines.json").read_text()), key=lambda l: l["at"])
+
+
+def check_lines(clips: list[Path]) -> list[str]:
     """Lines that start before the previous line in the same clip has ended."""
     problems = []
     for clip in clips:
-        lines = sorted(json.loads(clip.with_suffix(".lines.json").read_text()), key=lambda l: l["at"])
+        lines = lines_of(clip)
         for before, after in zip(lines, lines[1:]):
             end = before["at"] + before["seconds"]
             if end + GAP > after["at"]:
@@ -51,60 +59,31 @@ def check_narration(clips: list[Path]) -> list[str]:
     return problems
 
 
-def lines_of(clip: Path) -> list[dict]:
-    return sorted(json.loads(clip.with_suffix(".lines.json").read_text()), key=lambda l: l["at"])
-
-
-def tighten(clip: Path, out: Path) -> None:
-    """Plays each long silent stretch faster, leaving every spoken line at its own pace.
-
-    Between lines a scene scrolls, clicks and waits for the page, and on film
-    those stretches read as dead air. Each one longer than MAX_GAP is sped up
-    to last MAX_GAP, at most MAX_SPEED times faster. The new narration
-    timeline is written beside the output.
-    """
+def tighten(clip: Path, out: Path) -> list[dict]:
+    """Plays each long silent stretch faster; returns the lines on the new timeline."""
     lines = lines_of(clip)
     seconds = probe(clip)[2]
     cuts, at = [], 0.0
     for line in lines:
-        cuts.append((at, line["at"], False))
-        cuts.append((line["at"], min(seconds, line["at"] + line["seconds"]), True))
+        cuts.append((at, line["at"], None))
+        cuts.append((line["at"], min(seconds, line["at"] + line["seconds"]), line))
         at = line["at"] + line["seconds"]
-    cuts.append((at, seconds, False))
+    cuts.append((at, seconds, None))
     parts, labels, moved, now = [], [], [], 0.0
-    for i, (start, end, spoken) in enumerate(c for c in cuts if c[1] - c[0] > 0.01):
+    for i, (start, end, line) in enumerate(c for c in cuts if c[1] - c[0] > 0.01):
         length = end - start
-        new = length if spoken or length <= MAX_GAP else max(MAX_GAP, length / MAX_SPEED)
-        factor = new / length
-        parts.append(f"[0:v]trim=start={start:.3f}:end={end:.3f},setpts=(PTS-STARTPTS)*{factor:.5f}[v{i}]")
-        parts.append(f"[0:a]atrim=start={start:.3f}:end={start + new:.3f},asetpts=PTS-STARTPTS[a{i}]")
-        labels.append(f"[v{i}][a{i}]")
-        if spoken:
-            moved.append({**next(l for l in lines if abs(l["at"] - start) < 1e-6), "at": now})
+        new = length if line or length <= MAX_GAP else max(MAX_GAP, length / MAX_SPEED)
+        parts.append(f"[0:v]trim=start={start:.3f}:end={end:.3f},setpts=(PTS-STARTPTS)*{new / length:.5f}[v{i}]")
+        labels.append(f"[v{i}]")
+        if line:
+            moved.append({**line, "at": now})
         now += new
-    parts.append(f"{''.join(labels)}concat=n={len(labels)}:v=1:a=1[v][a]")
+    parts.append(f"{''.join(labels)}concat=n={len(labels)}:v=1:a=0[v]")
     subprocess.run([
         "ffmpeg", "-y", "-v", "error", "-i", str(clip), "-filter_complex", ";".join(parts),
-        "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "14",
-        "-r", "60", "-c:a", "aac", "-b:a", "256k", str(out),
+        "-map", "[v]", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-r", "60", str(out),
     ], check=True)
-    out.with_suffix(".lines.json").write_text(json.dumps(moved, indent=2))
-
-
-def padding(clip: Path) -> tuple[float, float]:
-    """Seconds of held frame and silence to add before and after a clip.
-
-    The recorder keeps frames only when the screen changes, so a clip that
-    ends on a still screen stops right after its last word. Padding both ends
-    puts every transition over silence.
-    """
-    lines = lines_of(clip)
-    seconds = probe(clip)[2]
-    if not lines:
-        return 0.0, 0.0
-    head = max(0.0, FADE + LEAD - lines[0]["at"])
-    tail = max(0.0, lines[-1]["at"] + lines[-1]["seconds"] + FADE + LEAD - seconds)
-    return head, tail
+    return moved
 
 
 def cover(image: Image.Image, w: int, h: int) -> Image.Image:
@@ -114,75 +93,104 @@ def cover(image: Image.Image, w: int, h: int) -> Image.Image:
     return image.crop((left, top, left + w, top + h))
 
 
-def prepare(clip: Path, wallpaper: Path, out: Path, tmp: Path) -> None:
-    """Pads a clip, and frames it on the wallpaper unless it is already full frame."""
+def frame(clip: Path, lines: list[dict], wallpaper: Path, out: Path, tmp: Path) -> float:
+    """Frames a clip on the wallpaper, padding the ends so transitions fall between lines.
+
+    The recorder keeps frames only when the screen changes, so a clip that
+    ends on a still screen stops right after its last line. Returns the head
+    padding, by which the clip's lines move.
+    """
     vw, vh, seconds = probe(clip)
-    head, tail = padding(clip)
+    head = max(0.0, FADE + LEAD - lines[0]["at"]) if lines else 0.0
+    tail = max(0.0, lines[-1]["at"] + lines[-1]["seconds"] + FADE + LEAD - seconds) if lines else 0.0
     total = f"{seconds + head + tail:.3f}"
+    x, y = (W - vw) // 2, TOP
+    background = cover(Image.open(wallpaper).convert("RGB"), W, H).filter(ImageFilter.GaussianBlur(18))
+    shadow = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(shadow).rounded_rectangle((x, y + SHADOW_OFFSET, x + vw, y + vh + SHADOW_OFFSET), RADIUS, fill=SHADOW_ALPHA)
+    background.paste(Image.new("RGB", (W, H), (20, 16, 12)), (0, 0), shadow.filter(ImageFilter.GaussianBlur(SHADOW_BLUR)))
+    mask = Image.new("L", (vw, vh), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, vw - 1, vh - 1), RADIUS, fill=255)
+    background.save(tmp / "bg.png")
+    mask.save(tmp / "mask.png")
     pad = f"tpad=start_mode=clone:start_duration={head:.3f}:stop_mode=clone:stop_duration={tail:.3f}"
-    audio = f"[0:a]adelay={round(head * 1000)}:all=1,apad[a]"
-    if (vw, vh) == (W, H):
-        inputs, video = [], f"[0:v]{pad},format=yuv420p[o]"
-    else:
-        x, y = (W - vw) // 2, (H - vh) // 2
-        background = cover(Image.open(wallpaper).convert("RGB"), W, H).filter(ImageFilter.GaussianBlur(18))
-        shadow = Image.new("L", (W, H), 0)
-        ImageDraw.Draw(shadow).rounded_rectangle((x, y + SHADOW_OFFSET, x + vw, y + vh + SHADOW_OFFSET), RADIUS, fill=SHADOW_ALPHA)
-        background.paste(Image.new("RGB", (W, H), (20, 16, 12)), (0, 0), shadow.filter(ImageFilter.GaussianBlur(SHADOW_BLUR)))
-        mask = Image.new("L", (vw, vh), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, vw - 1, vh - 1), RADIUS, fill=255)
-        background.save(tmp / "bg.png")
-        mask.save(tmp / "mask.png")
-        # The stills loop forever, so they and the output are cut to the clip's length.
-        inputs = ["-loop", "1", "-framerate", "60", "-t", total, "-i", str(tmp / "bg.png"),
-                  "-loop", "1", "-framerate", "60", "-t", total, "-i", str(tmp / "mask.png")]
-        video = (f"[0:v]{pad},format=yuva420p[v];[2:v]format=gray[m];[v][m]alphamerge[r];"
-                 f"[1:v][r]overlay={x}:{y}:shortest=1,format=yuv420p[o]")
     subprocess.run([
-        "ffmpeg", "-y", "-v", "error", "-i", str(clip), *inputs,
-        "-filter_complex", f"{video};{audio}",
-        "-map", "[o]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "14",
-        "-r", "60", "-c:a", "aac", "-b:a", "256k", "-t", total, str(out),
+        "ffmpeg", "-y", "-v", "error", "-i", str(clip),
+        # The stills loop forever, so they and the output are cut to the clip's length.
+        "-loop", "1", "-framerate", "60", "-t", total, "-i", str(tmp / "bg.png"),
+        "-loop", "1", "-framerate", "60", "-t", total, "-i", str(tmp / "mask.png"),
+        "-filter_complex",
+        f"[0:v]{pad},format=yuva420p[v];[2:v]format=gray[m];[v][m]alphamerge[r];"
+        f"[1:v][r]overlay={x}:{y}:shortest=1,format=yuv420p[o]",
+        "-map", "[o]", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-r", "60", "-t", total, str(out),
     ], check=True)
+    return head
 
 
-def stitch(clips: list[Path], out: Path) -> None:
+def ass_time(t: float) -> str:
+    cs = max(0, round(t * 100))
+    return f"{cs // 360000}:{cs // 6000 % 60:02d}:{cs // 100 % 60:02d}.{cs % 100:02d}"
+
+
+def captions(cues: list[tuple[float, float, str]], path: Path) -> None:
+    """Writes the cues as ASS subtitles, centred in the band below the window."""
+    band = H - (TOP + 900)
+    style = ("Style: Caption,Inter Medium,31,&H00F4EEE4,&H00F4EEE4,&H00191C1F,&H40191C1F,0,0,0,0,100,100,0,0,"
+             f"3,12,0,2,280,280,{max(10, band // 2 - 46)},1")
+    events = "\n".join(
+        f"Dialogue: 0,{ass_time(a)},{ass_time(b)},Caption,,0,0,0,,{text}" for a, b, text in cues)
+    path.write_text(
+        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n"
+        "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+        "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding\n" + style + "\n\n"
+        "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n" + events + "\n",
+        "utf-8")
+
+
+def stitch(clips: list[Path], subtitles: Path, out: Path) -> None:
     durations = [probe(c)[2] for c in clips]
     inputs = [arg for c in clips for arg in ("-i", str(c))]
     # Every clip on the same frame rate and timebase, which xfade requires.
     parts = [f"[{i}:v]fps=60,settb=AVTB,setsar=1[n{i}]" for i in range(len(clips))]
-    video, audio, offset = "[n0]", "[0:a]", 0.0
+    video, offset = "[n0]", 0.0
     for i in range(1, len(clips)):
         offset += durations[i - 1] - FADE
         parts.append(f"{video}[n{i}]xfade=transition=fade:duration={FADE}:offset={offset:.3f}[v{i}]")
-        parts.append(f"{audio}[{i}:a]acrossfade=d={FADE}:c1=tri:c2=tri[a{i}]")
-        video, audio = f"[v{i}]", f"[a{i}]"
-    parts.append(f"{video}format=yuv420p[vout]")
-    parts.append(f"{audio}loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[aout]")
-    graph = ";".join(parts)
+        video = f"[v{i}]"
+    parts.append(f"{video}subtitles={subtitles},format=yuv420p[vout]")
     subprocess.run([
-        "ffmpeg", "-y", "-v", "error", "-stats", *inputs, "-filter_complex", graph,
-        "-map", "[vout]", "-map", "[aout]", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-        "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(out),
+        "ffmpeg", "-y", "-v", "error", "-stats", *inputs, "-filter_complex", ";".join(parts),
+        "-map", "[vout]", "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+        "-movflags", "+faststart", str(out),
     ], check=True)
 
 
 def main(corpus: Path, wallpaper: Path, out: Path) -> None:
     clips = [corpus / f"{name}.mp4" for name in TOUR]
-    problems = check_narration(clips)
+    problems = check_lines(clips)
     if problems:
-        sys.exit("narration overlaps:\n  " + "\n  ".join(problems))
+        sys.exit("lines overlap:\n  " + "\n  ".join(problems))
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp = Path(tmp_dir)
-        ready = []
+        framed, cues, start = [], [], 0.0
         for clip in clips:
-            tight = tmp / f"{clip.stem}.mp4"
-            tighten(clip, tight)
-            prepared = tmp / f"{clip.stem}.prepared.mp4"
-            prepare(tight, wallpaper, prepared, tmp)
-            ready.append(prepared)
-        stitch(ready, out)
-    print(f"compose: {out} ({probe(out)[2]:.1f}s)")
+            tight = tmp / f"{clip.stem}.tight.mp4"
+            lines = tighten(clip, tight)
+            ready = tmp / f"{clip.stem}.framed.mp4"
+            head = frame(tight, lines, wallpaper, ready, tmp)
+            length = probe(ready)[2]
+            for i, line in enumerate(lines):
+                begin = start + head + line["at"]
+                end = begin + line["seconds"] + LINGER
+                if i + 1 < len(lines):
+                    end = min(end, start + head + lines[i + 1]["at"] - 0.12)
+                cues.append((begin, min(end, start + length - FADE), line["text"]))
+            framed.append(ready)
+            start += length - FADE
+        captions(cues, tmp / "captions.ass")
+        stitch(framed, tmp / "captions.ass", out)
+    print(f"compose: {out} ({probe(out)[2]:.1f}s, {len(cues)} captions)")
 
 
 if __name__ == "__main__":

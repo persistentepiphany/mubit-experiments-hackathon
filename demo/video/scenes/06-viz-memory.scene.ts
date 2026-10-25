@@ -9,12 +9,11 @@ scene('viz-memory', { title: 'A lesson through Mubit', blurb: 'Written after run
   await actor.overlay(false);
   await actor.beat(500);
   await viz(page, 1);
-  await actor.beat(1200);
+  await actor.beat(1000);
   await viz(page, 2);
   await actor.say(L[0], 2600);
   await viz(page, 3);
   await actor.say(L[1], 3000);
   await viz(page, 4);
-  await actor.say(L[2]);
-  await actor.beat(400);
+  await actor.beat(1600);
 });

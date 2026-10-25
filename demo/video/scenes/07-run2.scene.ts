@@ -38,12 +38,8 @@ scene('run2', { title: 'Second run', blurb: 'The lesson is recalled, and the run
   await learned(page).waitFor();
   await scrollTo(actor, page, learned(page), 230);
   await actor.settle();
-  await actor.spotlight(learned(page), L[3], { scale: 1.55, stay: true });
   await callout(page, learned(page), 'Mubit memory · record_outcome(success)', 'above');
-  await actor.say(L[4]);
+  await actor.spotlight(learned(page), L[3], { scale: 1.55, stay: true });
   await clearCallouts(page);
   await actor.unfocus();
-  // The report opens in the next scene.
-  await scrollTo(actor, page, page.locator('h1.run'), 140);
-  await actor.hover(page.locator('a.btnlink', { hasText: 'Open report' }), 700);
 });

@@ -1,66 +1,46 @@
 /**
- * Every line of narration in the film, in the order it is spoken.
+ * Every caption in the film, in the order it appears.
  *
- * Kept in one file so the script can be read and edited as a script, and so
- * prevoice.mjs can synthesise every line before filming: a scene then holds
- * each line for its real length and no two lines overlap. Numbers are
- * written as words because that is how the voice should say them.
+ * The film has no voice-over. Each line is still synthesised (prevoice.mjs)
+ * so a scene holds it for as long as it takes to say, which is a comfortable
+ * reading time; compose.py then drops the audio and burns the lines in as
+ * captions.
  */
 export const LINES = {
-  intro: [
-    'This is lab loop, our project for the Mubit hackathon.',
-    "It's an AI lab for protein experiments. Agents plan each experiment, run it on GPUs, and check the result.",
-    'Mubit is what lets it learn from each run.',
-  ],
   mubit: [
-    'Five AI agents do the reasoning, on Claude Opus 5 and Claude Haiku.',
-    'Every call they make goes through the Mubit gateway, which records it and files it under the run it belongs to.',
-    'After each run, the reviewer writes short lessons into Mubit memory.',
-    'Before the next run, the planner gets those lessons back, and Mubit tracks which ones led to a pass.',
-    'The experiments run on GPUs on Modal.',
+    'Five agents do the reasoning. Each is a fixed role with its own prompt.',
+    'Every agent call goes through the Mubit gateway, recorded under its role and its run.',
+    'After a run, the reviewer turns what went wrong into short lessons in Mubit memory.',
+    'Before the next run, Mubit hands those lessons to the planner and tracks which ones led to a pass.',
+    'The experiments themselves run on GPUs on Modal.',
   ],
-  task: [
-    "Here's the lab loop website.",
-    "We'll fold one protein chain, thirty amino acids long.",
-    'We want its 3D structure, and whether to trust it.',
-  ],
+  task: ['Task: fold a 30-residue protein chain and judge whether the fold can be trusted.'],
   run1: [
-    'Mubit memory has no lessons for this yet, and no saved skill fits, so it starts from scratch.',
-    'It reads the literature with Paper Q A two.',
-    'Every paper it reads is frozen into the run, so you can open the exact text it used.',
-    'The planner designs one ESMFold prediction, with two checks it must pass.',
-    "One says the pTM score, the model's confidence in the overall fold, must be at least zero point five.",
-    'The predicted structure appears in the run, colored by how confident the model is in each residue.',
-    'But the pTM comes back at zero point four nine four, just under the line, so the run fails its own check.',
+    'Mubit memory has nothing for this task yet, so labloop plans from scratch.',
+    'The planner, called through the Mubit gateway, designs the run and freezes its pass criteria.',
+    'One criterion: pTM, the confidence in the overall fold, must be at least 0.5.',
+    "ESMFold's predicted structure, colored by per-residue confidence.",
+    'pTM comes back at 0.494, so the run fails its own check.',
   ],
-  lesson: [
-    'The reviewer works out why: zero point five is too strict for a chain this short.',
-    'That lesson is saved to Mubit memory.',
-  ],
+  lesson: ["The reviewer's correction: 0.5 is too strict for a chain this short. It is written to Mubit memory."],
   memory: [
-    'Mubit stores that lesson with the run it came from.',
-    'When the same task comes back, Mubit hands the lesson to the planner.',
-    'So the planner sets the pTM floor at zero point three.',
+    'Mubit stores the lesson with the run it came from.',
+    'When the same task comes back, Mubit retrieves it before any planning starts.',
   ],
   run2: [
-    'Now we run the exact same task again.',
-    'This time the log shows one lesson recalled from Mubit memory.',
-    'The planner freezes a pTM floor of zero point three.',
-    'The same fold passes, and lab loop saves the pipeline as a reusable skill.',
-    'Mubit records that the lesson led to a pass, and keeps a copy of the new skill.',
-  ],
-  report: [
-    "Every run also writes a report, built from the run's own records with no model writing it.",
-    'It draws the pipeline, and each check against its threshold.',
-    'And the predicted structure, with the confidence of every residue.',
+    'Same task, second run.',
+    'This time one lesson is recalled from Mubit memory.',
+    'The planner applies it and freezes a pTM floor of 0.3.',
+    'The run passes. The pipeline is saved as a skill, and Mubit marks the lesson as one that worked.',
   ],
   reuse: [
-    'Later we try a different short protein, the twenty residue trip cage.',
-    'It matches the saved skill and quotes the condition it matched, so research and planning are skipped.',
-    'It passes on new inputs, so the skill is now validated.',
+    'Later, a new protein: Trp-cage, 20 residues.',
+    'It matches the saved skill, so research and planning are skipped.',
+    'A second pass on different inputs makes the skill validated.',
   ],
   outro: [
-    'One lesson in Mubit memory turned a failed check into a reusable skill.',
-    'The Mubit gateway records every agent call, and Mubit memory lets each run start from what earlier runs learned.',
+    'One correction in Mubit memory turned a failed check into a reusable skill.',
+    'Each role builds its own recorded history in Mubit, and its model is one setting away from a smaller, task-adapted one.',
+    'New proteins and new papers keep adding lessons, so every run starts from what the last one learned.',
   ],
 } as const;

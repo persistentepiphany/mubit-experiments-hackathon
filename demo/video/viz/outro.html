@@ -16,16 +16,16 @@ h2 { position: absolute; left: 60px; top: 40px; margin: 0; font-size: 40px; }
 .node.mem p { color: #cfc5b6; }
 .node.mem .eyebrow { color: #bdb3a4; }
 .join { align-self: center; color: var(--muted); font-size: 20px; }
-.bottom { position: absolute; left: 60px; right: 60px; top: 420px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.bottom { position: absolute; left: 60px; right: 60px; top: 410px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
 .bottom .dark { position: relative; }
-.bottom h3 { margin: 4px 0 6px; font-size: 26px; }
-.bottom p { margin: 0; font-size: 14.5px; color: #d9cfc0; line-height: 1.5; }
+.bottom h3 { margin: 4px 0 6px; font-size: 23px; line-height: 1.15; }
+.bottom p { margin: 0; font-size: 13.5px; color: #d9cfc0; line-height: 1.5; }
 .end { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; font-size: 15px; color: var(--muted); }
 </style>
 </head>
 <body>
 <div class="stage">
-  <h2 class="serif fade" id="title">What happened across three runs</h2>
+  <h2 class="serif fade" id="title">What Mubit changed across three runs</h2>
   <div class="track">
     <div class="node pop" id="n1"><div class="eyebrow">Run 1</div><h4>pTM floor 0.5</h4><p>The fold scored pTM 0.494.</p><span class="status fail"><span class="dot" style="background:var(--fail)"></span>Failed</span></div>
     <span class="join pop" id="j1">→</span>
@@ -36,8 +36,9 @@ h2 { position: absolute; left: 60px; top: 40px; margin: 0; font-size: 40px; }
     <div class="node pop" id="n4"><div class="eyebrow">Run 3</div><h4>Trp-cage, 20 residues</h4><p>Matched the skill, so no research or planning.</p><span class="status pass"><span class="dot" style="background:var(--olive)"></span>Passed · validated</span></div>
   </div>
   <div class="bottom">
-    <div class="dark pop" id="b1"><div class="eyebrow">Mubit gateway</div><h3 class="serif">A record of every agent call</h3><p>Five agents, one fixed prompt each, every call grouped under its run.</p></div>
-    <div class="dark pop" id="b2"><div class="eyebrow">Mubit memory</div><h3 class="serif">Each run starts from the last one's lessons</h3><p>Lessons are written after grading, recalled before planning, and reinforced when they lead to a pass.</p></div>
+    <div class="dark pop" id="b1"><div class="eyebrow">Mubit memory</div><h3 class="serif">Corrections become lessons</h3><p>Written after grading, recalled before planning, and reinforced when they lead to a pass.</p></div>
+    <div class="dark pop" id="b2"><div class="eyebrow">Mubit gateway</div><h3 class="serif">Each role keeps its own history</h3><p>Every call is recorded per role and per run. Each role's model is one setting, so it can move to a smaller, task-adapted one.</p></div>
+    <div class="dark pop" id="b3"><div class="eyebrow">Every new run</div><h3 class="serif">Starts from the last one</h3><p>New proteins and new papers add lessons and skills, and the next run plans with them.</p></div>
   </div>
   <div class="end fade" id="end">labloop · github.com/persistentepiphany/mubit-experiments-hackathon</div>
 </div>
@@ -47,7 +48,8 @@ const on = (ids, gap = 220) => ids.forEach((id, i) => setTimeout(() => $(id).cla
 window.viz = {
   go(step) {
     if (step === 1) on(['title', 'n1', 'j1', 'n2', 'j2', 'n3', 'j3', 'n4'], 260);
-    if (step === 2) on(['b1', 'b2', 'end'], 400);
+    if (step === 2) on(['b1', 'b2'], 400);
+    if (step === 3) on(['b3', 'end'], 400);
   },
 };
 </script>

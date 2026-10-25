@@ -12,10 +12,10 @@ scene('viz-mubit', { title: 'How labloop uses Mubit', blurb: 'The gateway and me
   await actor.beat(400);
   await actor.say(L[0]);
   await viz(page, 2);
-  await actor.beat(500);
+  await actor.beat(400);
   await actor.say(L[1], 3800);
   await viz(page, 3);
-  await actor.beat(600);
+  await actor.beat(500);
   await actor.say(L[2]);
   await viz(page, 4);
   await actor.say(L[3], 4000);
