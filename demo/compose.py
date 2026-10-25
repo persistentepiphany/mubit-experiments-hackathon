@@ -2,9 +2,9 @@
 
 1. Check the lines. video-demo writes where each line lands in a clip
    (<scene>.lines.json); no line may start before the previous one ends.
-2. Tighten each clip: a silent stretch between lines (scrolling, clicking,
-   waiting for the page) longer than MAX_GAP is played faster, at most
-   MAX_SPEED times, while every line keeps its own pace.
+2. Tighten each clip: a stretch between lines (scrolling, clicking, waiting
+   for the page) longer than MAX_GAP is played faster, at most MAX_SPEED
+   times, and each caption's own stretch plays LINE_SPEED times faster.
 3. Frame each clip in the style of Recordly (github.com/webadderallorg/recordly):
    the capture sits on one of Recordly's wallpapers, blurred, with rounded
    corners and a shadow, raised to leave a band below it for captions.
@@ -28,9 +28,10 @@ TOP = 34            # the window's distance from the top edge; captions sit belo
 TOUR = ["viz-mubit", "task", "run1", "lesson", "viz-memory", "run2", "reuse", "viz-outro"]
 FADE = 0.7          # seconds of crossfade between clips
 GAP = 0.08          # the least time between two lines
-LEAD = 0.35         # time kept between a transition and the nearest line
-MAX_GAP = 1.2       # a silent stretch longer than this is played faster...
-MAX_SPEED = 3.0     # ...but never more than this much faster
+LEAD = 0.25         # time kept between a transition and the nearest line
+MAX_GAP = 0.9       # a stretch between lines longer than this is played faster...
+MAX_SPEED = 3.5     # ...but never more than this much faster
+LINE_SPEED = 1.15   # each caption's own stretch plays this much faster; read, not spoken, it needs less time
 LINGER = 0.9        # a caption stays up this long after its line, unless the next one starts
 RADIUS, SHADOW_BLUR, SHADOW_OFFSET, SHADOW_ALPHA = 22, 30, 14, 110
 
@@ -72,11 +73,14 @@ def tighten(clip: Path, out: Path) -> list[dict]:
     parts, labels, moved, now = [], [], [], 0.0
     for i, (start, end, line) in enumerate(c for c in cuts if c[1] - c[0] > 0.01):
         length = end - start
-        new = length if line or length <= MAX_GAP else max(MAX_GAP, length / MAX_SPEED)
+        if line:
+            new = length / LINE_SPEED
+        else:
+            new = length if length <= MAX_GAP else max(MAX_GAP, length / MAX_SPEED)
         parts.append(f"[0:v]trim=start={start:.3f}:end={end:.3f},setpts=(PTS-STARTPTS)*{new / length:.5f}[v{i}]")
         labels.append(f"[v{i}]")
         if line:
-            moved.append({**line, "at": now})
+            moved.append({**line, "at": now, "seconds": new})
         now += new
     parts.append(f"{''.join(labels)}concat=n={len(labels)}:v=1:a=0[v]")
     subprocess.run([
