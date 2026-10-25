@@ -354,7 +354,7 @@ class Loop:
         try:
             from labloop import reporting, storage
             from labloop.bundle import run_bundle
-        except ImportError:
+        except Exception:  # an absent or broken report module must not cost the run its verdict
             return None
         emit("start", "Writing the run report with figures", phase="learn", key="report")
         try:
